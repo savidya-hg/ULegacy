@@ -1,0 +1,187 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+body {
+    width: 380px;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 14px;
+    background: #f5f7fa;
+    color: #1a1a2e;
+}
+.container {
+    padding: 16px;
+}
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+.header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a1a2e;
+}
+.role-selector select {
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 13px;
+    background: white;
+    cursor: pointer;
+}
+.status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #e9ecef;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 12px;
+}
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+}
+.badge-active {
+    background: #d4edda;
+    color: #155724;
+}
+.badge-inactive {
+    background: #f8d7da;
+    color: #721c24;
+}
+.badge-grace {
+    background: #fff3cd;
+    color: #856404;
+}
+.last-check {
+    color: #6c757d;
+}
+.dashboard {
+    margin-top: 8px;
+}
+.section {
+    background: white;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #2d3748;
+}
+.hidden {
+    display: none !important;
+}
+.btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.btn-primary {
+    background: #007bff;
+    color: white;
+}
+.btn-primary:hover {
+    background: #0069d9;
+}
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+.btn-secondary:hover {
+    background: #5a6268;
+}
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+.btn-danger:hover {
+    background: #c82333;
+}
+.btn-icon {
+    background: transparent;
+    padding: 2px 6px;
+    font-size: 16px;
+    line-height: 1;
+}
+input, select {
+    width: 100%;
+    padding: 6px 10px;
+    margin: 4px 0;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+.key-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f1f3f5;
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin: 4px 0;
+    word-break: break-all;
+    font-family: monospace;
+    font-size: 13px;
+}
+.account-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fa;
+    padding: 6px 10px;
+    margin: 4px 0;
+    border-radius: 4px;
+}
+.account-item .platform {
+    font-weight: 500;
+}
+.account-item .status-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+.status-active {
+    background: #d4edda;
+    color: #155724;
+}
+.status-deleted {
+    background: #e2e3e5;
+    color: #383d41;
+}
+.remove-account {
+    background: none;
+    border: none;
+    color: #dc3545;
+    cursor: pointer;
+    font-size: 16px;
+}
+.settlement-list .account-item button {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 2px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+#statusMessage {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #28a745;
+}

@@ -18,7 +18,8 @@
     "http://localhost:8000/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "action": {
     "default_popup": "popup/popup.html",
@@ -36,7 +37,6 @@
         "https://*.instagram.com/*"
       ],
       "js": [
-        "utils/encryption.js",
         "content/privacy-shield.js",
         "content/navigation-guard.js",
         "content/guided-logic.js"

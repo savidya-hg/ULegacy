@@ -2,68 +2,79 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <style>
-        body { width: 350px; padding: 15px; font-family: Arial, sans-serif; }
-        .hidden { display: none; }
-        .role-selector { margin-bottom: 15px; }
-        .role-btn { padding: 8px 15px; margin-right: 5px; cursor: pointer; }
-        .role-btn.active { background: #007bff; color: white; border: none; }
-        .dashboard { border-top: 1px solid #ccc; padding-top: 10px; }
-        button { background: #007bff; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
-        button.danger { background: #dc3545; }
-        input, textarea { width: 100%; padding: 6px; margin: 4px 0; box-sizing: border-box; }
-        .account-item { background: #f8f9fa; padding: 8px; margin: 5px 0; border-radius: 4px; display: flex; justify-content: space-between; }
-        .status-badge { padding: 2px 8px; border-radius: 12px; font-size: 12px; }
-        .status-active { background: #28a745; color: white; }
-        .status-deleted { background: #6c757d; color: white; }
-    </style>
+    <title>ULegacy</title>
+    <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-
-    <h2>ULegacy</h2>
-    <div class="role-selector">
-        <button id="roleOwner" class="role-btn active">Owner</button>
-        <button id="roleBeneficiary" class="role-btn">Beneficiary</button>
-    </div>
-
-    <!-- Owner Dashboard -->
-    <div id="ownerDashboard">
-        <h3>Your Accounts</h3>
-        <div id="accountList"></div>
-        <button id="addAccountBtn">+ Add Account</button>
-        <div id="addAccountForm" class="hidden">
-            <select id="platformSelect">
-                <option value="facebook">Facebook</option>
-                <option value="google">Google</option>
-                <option value="instagram">Instagram</option>
-            </select>
-            <input type="text" id="usernameInput" placeholder="Username/Email">
-            <input type="password" id="passwordInput" placeholder="Password">
-            <button id="saveAccountBtn">Save</button>
-            <button id="cancelAddBtn">Cancel</button>
+    <div class="container">
+        <!-- Header with role selector -->
+        <div class="header">
+            <h2>ULegacy</h2>
+            <div class="role-selector">
+                <select id="roleSelect">
+                    <option value="owner">Owner</option>
+                    <option value="beneficiary">Beneficiary</option>
+                </select>
+            </div>
         </div>
-        <hr>
-        <h4>Beneficiary</h4>
-        <input type="email" id="beneficiaryEmail" placeholder="beneficiary@email.com">
-        <button id="saveBeneficiaryBtn">Save</button>
-        <hr>
-        <h4>Recovery Key</h4>
-        <p id="recoveryKeyDisplay">Not set</p>
-        <button id="generateKeyBtn">Generate New Key</button>
-        <hr>
-        <button id="resetTimerBtn" class="danger">I'm Alive (Reset Timer)</button>
-        <p id="statusMessage"></p>
-    </div>
 
-    <!-- Beneficiary Dashboard -->
-    <div id="beneficiaryDashboard" class="hidden">
-        <h3>Settlement Portal</h3>
-        <p>Enter the recovery key provided by the owner:</p>
-        <input type="password" id="beneficiaryKeyInput" placeholder="Recovery Key">
-        <button id="beneficiaryVerifyBtn">Verify & Load</button>
-        <div id="settlementAccounts"></div>
-    </div>
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <span id="statusBadge" class="badge badge-active">● Active</span>
+            <span id="lastCheck" class="last-check">Last check: never</span>
+        </div>
 
-    <script src="popup.js"></script>
+        <!-- Owner Dashboard -->
+        <div id="ownerDashboard" class="dashboard">
+            <div class="section">
+                <h3>Your Accounts</h3>
+                <div id="accountList"></div>
+                <button id="addAccountBtn" class="btn btn-secondary">+ Add Account</button>
+                <div id="addAccountForm" class="hidden">
+                    <select id="platformSelect">
+                        <option value="facebook">Facebook</option>
+                        <option value="google">Google</option>
+                        <option value="instagram">Instagram</option>
+                    </select>
+                    <input type="text" id="usernameInput" placeholder="Username/Email">
+                    <input type="password" id="passwordInput" placeholder="Password">
+                    <button id="saveAccountBtn" class="btn btn-primary">Save</button>
+                    <button id="cancelAddBtn" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h3>Beneficiary</h3>
+                <input type="email" id="beneficiaryEmail" placeholder="beneficiary@email.com">
+                <button id="saveBeneficiaryBtn" class="btn btn-primary">Save</button>
+            </div>
+
+            <div class="section">
+                <h3>Recovery Key</h3>
+                <div class="key-row">
+                    <span id="recoveryKeyDisplay">Not set</span>
+                    <button id="copyKeyBtn" class="btn btn-icon" title="Copy key"><ion-icon name="copy-outline"></ion-icon></button>
+                </div>
+                <button id="generateKeyBtn" class="btn btn-secondary">Generate New Key</button>
+            </div>
+
+            <div class="section">
+                <button id="resetTimerBtn" class="btn btn-danger">Reset Timer</button>
+                <p id="statusMessage"></p>
+            </div>
+        </div>
+
+        <!-- Beneficiary Dashboard -->
+        <div id="beneficiaryDashboard" class="dashboard hidden">
+            <div class="section">
+                <h3>Settlement Portal</h3>
+                <p>Enter the recovery key provided by the owner:</p>
+                <input type="password" id="beneficiaryKeyInput" placeholder="Recovery Key">
+                <button id="beneficiaryVerifyBtn" class="btn btn-primary">Verify & Load</button>
+                <div id="settlementAccounts" class="settlement-list"></div>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="popup.js"></script>
 </body>
 </html>
