@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-dotenv
+supabase-py
+pydantic
+python-multipart
+httpx
+sendgrid
+twilio
+argon2-cffi
