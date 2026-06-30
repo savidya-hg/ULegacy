@@ -8,8 +8,6 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 import argon2
 import secrets
-from routes import auth, heartbeat, vault, settlement
-
 
 load_dotenv()
 
@@ -22,8 +20,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.include_router(auth.router)
 
 # Supabase client
 supabase: Client = create_client(
