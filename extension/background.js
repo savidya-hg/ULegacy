@@ -20,33 +20,6 @@ async function sendHeartbeat(userId) {
     return callApi('/api/heartbeat', 'POST', { user_id: userId });
 }
 
-// --- New: Handle deletion tab opening ---
-async function openDeletionTab(platform, credentials, userId) {
-    const urls = {
-        facebook: 'https://www.facebook.com/settings?tab=security',
-        google: 'https://myaccount.google.com/deleteaccount',
-        instagram: 'https://www.instagram.com/accounts/delete/'
-    };
-
-    const url = urls[platform] || urls.facebook;
-
-    const tab = await chrome.tabs.create({ url });
-
-    chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
-        if (tabId === tab.id && info.status === 'complete') {
-            chrome.tabs.onUpdated.removeListener(listener);
-            chrome.tabs.sendMessage(tabId, {
-                type: 'START_DELETION',
-                platform: platform,
-                credentials: credentials,
-                userId: userId
-            });
-        }
-    });
-
-    return tab;
-}
-
 let userId = null;
 
 // Load user ID from storage on startup
@@ -97,14 +70,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }).catch((e) => {
             sendResponse({ status: 'error', message: e.message });
         });
-        return true;
-    }
-     // --- New: Handle deletion request from beneficiary dashboard ---
-    if (message.type === 'DELETE_ACCOUNT') {
-        const { platform, credentials, userId } = message.payload;
-        openDeletionTab(platform, credentials, userId)
-            .then(() => sendResponse({ status: 'opened' }))
-            .catch(err => sendResponse({ status: 'error', message: err.message }));
         return true;
     }
 });
