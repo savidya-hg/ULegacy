@@ -1,202 +1,129 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime, timedelta
-import os
-from dotenv import load_dotenv
-from supabase import create_client, Client
-import argon2
-import secrets
+from typing import Optional
+from pydantic import BaseModel, EmailStr
 
-load_dotenv()
+# Import database helpers
+from .database import supabase, hash_recovery_key, verify_recovery_key, generate_settlement_token
 
-app = FastAPI(title="ULegacy API")
+# Import routers
+from .routes import heartbeat, settlement, vault
 
-# CORS for extension
+app = FastAPI(
+    title="ULegacy API",
+    description="Post Mortem Data Management System",
+    version="1.0.0"
+)
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restrict in production
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Supabase client
-supabase: Client = create_client(
-    os.getenv("SUPABASE_URL"),
-    os.getenv("SUPABASE_KEY")
-)
+# ---------- Include Routers ----------
+app.include_router(heartbeat.router)
+app.include_router(settlement.router)
+app.include_router(vault.router)
 
-# ---------- Pydantic Models ----------
-class HeartbeatRequest(BaseModel):
-    user_id: str
-
-class VaultSaveRequest(BaseModel):
-    user_id: str
-    encrypted_data: str
-    platform_metadata: dict
-
-class VerifyRequest(BaseModel):
-    user_id: str
+# ---------- Models ----------
+class UserRegisterRequest(BaseModel):
+    email: EmailStr
     recovery_key: str
+    beneficiary_email: Optional[EmailStr] = None
+    beneficiary_phone: Optional[str] = None
 
-class SettlementTriggerRequest(BaseModel):
-    user_id: str
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    status: str
+    last_heartbeat: str
+    created_at: str
 
-# ---------- Helper Functions ----------
-ph = argon2.PasswordHasher()
-
-def hash_recovery_key(key: str, salt: str = None) -> tuple:
-    if not salt:
-        salt = secrets.token_hex(16)
-    hash = ph.hash(f"{key}{salt}")
-    return hash, salt
-
-def verify_recovery_key(key: str, hash: str, salt: str) -> bool:
-    try:
-        ph.verify(hash, f"{key}{salt}")
-        return True
-    except:
-        return False
-
-# ---------- Endpoints ----------
-@app.post("/api/heartbeat")
-async def heartbeat(req: HeartbeatRequest):
-    # Update last_heartbeat and reset status if in grace period
-    user = supabase.table("users").select("*").eq("id", req.user_id).execute()
-    if not user.data:
-        raise HTTPException(404, "User not found")
-    
-    user_data = user.data[0]
-    new_status = "active"
-    if user_data["status"] == "grace_period":
-        new_status = "active"
-    
-    supabase.table("users").update({
-        "last_heartbeat": datetime.utcnow().isoformat(),
-        "status": new_status,
-        "grace_period_start": None
-    }).eq("id", req.user_id).execute()
-    
-    # Log
-    supabase.table("audit_logs").insert({
-        "user_id": req.user_id,
-        "action": "heartbeat",
-        "metadata": {"status": new_status}
-    }).execute()
-    
-    return {"status": "ok"}
-
-@app.post("/api/vault/save")
-async def save_vault(req: VaultSaveRequest):
-    # Check if user exists
-    user = supabase.table("users").select("id").eq("id", req.user_id).execute()
-    if not user.data:
-        raise HTTPException(404, "User not found")
-    
-    # Check if vault exists, update or insert
-    existing = supabase.table("vaults").select("id").eq("user_id", req.user_id).execute()
+# ---------- User Endpoints ----------
+@app.post("/api/users/register")
+async def register_user(req: UserRegisterRequest):
+    existing = supabase.table("users").select("id").eq("email", req.email).execute()
     if existing.data:
-        supabase.table("vaults").update({
-            "encrypted_data": req.encrypted_data,
-            "platform_metadata": req.platform_metadata
-        }).eq("user_id", req.user_id).execute()
-    else:
-        supabase.table("vaults").insert({
-            "user_id": req.user_id,
-            "encrypted_data": req.encrypted_data,
-            "platform_metadata": req.platform_metadata
-        }).execute()
-    
-    return {"status": "saved"}
+        raise HTTPException(400, "User already exists")
 
-@app.get("/api/vault/{user_id}")
-async def get_vault(user_id: str):
-    vault = supabase.table("vaults").select("encrypted_data").eq("user_id", user_id).execute()
-    if not vault.data:
-        raise HTTPException(404, "Vault not found")
-    return {"encrypted_data": vault.data[0]["encrypted_data"]}
+    hash_value, salt = hash_recovery_key(req.recovery_key)
+    user_data = {
+        "email": req.email,
+        "recovery_key_hash": hash_value,
+        "salt": salt,
+        "beneficiary_email": req.beneficiary_email,
+        "beneficiary_phone": req.beneficiary_phone,
+        "status": "active",
+        "last_heartbeat": datetime.utcnow().isoformat()
+    }
 
-@app.post("/api/settlement/verify")
-async def verify_recovery(req: VerifyRequest):
-    user = supabase.table("users").select("*").eq("id", req.user_id).execute()
-    if not user.data:
+    result = supabase.table("users").insert(user_data).execute()
+    if not result.data:
+        raise HTTPException(500, "Failed to create user")
+
+    user = result.data[0]
+    supabase.table("audit_logs").insert({
+        "user_id": user["id"],
+        "action": "user_registered",
+        "metadata": {"email": req.email}
+    }).execute()
+
+    return UserResponse(
+        id=user["id"],
+        email=user["email"],
+        status=user["status"],
+        last_heartbeat=user["last_heartbeat"],
+        created_at=user["created_at"]
+    )
+
+@app.get("/api/users/{user_id}")
+async def get_user(user_id: str):
+    result = supabase.table("users").select("*").eq("id", user_id).execute()
+    if not result.data:
         raise HTTPException(404, "User not found")
-    user_data = user.data[0]
-    
-    if not verify_recovery_key(req.recovery_key, user_data["recovery_key_hash"], user_data["salt"]):
-        raise HTTPException(401, "Invalid recovery key")
-    
-    # Generate settlement token
-    token = secrets.token_urlsafe(32)
-    supabase.table("users").update({
-        "settlement_token": token,
-        "status": "deceased"
-    }).eq("id", req.user_id).execute()
-    
-    # Log
-    supabase.table("audit_logs").insert({
-        "user_id": req.user_id,
-        "action": "settlement_verified",
-        "metadata": {"token_generated": True}
-    }).execute()
-    
-    return {"settlement_token": token}
+    user = result.data[0]
+    return UserResponse(
+        id=user["id"],
+        email=user["email"],
+        status=user["status"],
+        last_heartbeat=user["last_heartbeat"],
+        created_at=user["created_at"]
+    )
 
-@app.post("/api/settlement/complete")
-async def complete_settlement(req: SettlementTriggerRequest):
-    # Mark all accounts as deleted – in practice you'd update platform status
-    # Here we just log and clean up
-    supabase.table("users").update({
-        "status": "settled"
-    }).eq("id", req.user_id).execute()
-    
-    # Optionally delete vault
-    supabase.table("vaults").delete().eq("user_id", req.user_id).execute()
-    
-    supabase.table("audit_logs").insert({
-        "user_id": req.user_id,
-        "action": "settlement_complete"
-    }).execute()
-    
-    return {"status": "complete"}
-
-# ---------- Scheduler (simplified: runs on startup) ----------
-@app.on_event("startup")
-async def startup_event():
-    # This would be a cron job in production
-    # For now, we'll just run a check manually via endpoint
-    pass
-
+# ---------- Admin Endpoints ----------
 @app.get("/api/admin/check-inactive")
 async def check_inactive():
-    # Find users with no heartbeat for 30 days
     cutoff = (datetime.utcnow() - timedelta(days=30)).isoformat()
     inactive = supabase.table("users").select("*").eq("status", "active").lt("last_heartbeat", cutoff).execute()
-    
+
+    results = {"inactive_users": [], "expired_grace": [], "settlement_triggered": []}
+
     for user in inactive.data:
-        # Move to grace period
         supabase.table("users").update({
             "status": "grace_period",
             "grace_period_start": datetime.utcnow().isoformat()
         }).eq("id", user["id"]).execute()
-        
-        # Send notifications (placeholder)
+        results["inactive_users"].append(user["email"])
         print(f"GRACE PERIOD STARTED for {user['email']}")
-    
-    # Check expired grace periods (7 days)
+
     grace_cutoff = (datetime.utcnow() - timedelta(days=7)).isoformat()
     expired = supabase.table("users").select("*").eq("status", "grace_period").lt("grace_period_start", grace_cutoff).execute()
-    
+
     for user in expired.data:
-        # Mark deceased and generate token
-        token = secrets.token_urlsafe(32)
+        token = generate_settlement_token()
         supabase.table("users").update({
             "status": "deceased",
             "settlement_token": token
         }).eq("id", user["id"]).execute()
-        
-        # Send settlement email (placeholder)
+        results["expired_grace"].append(user["email"])
         print(f"SETTLEMENT TRIGGERED for {user['email']} token: {token}")
-    
-    return {"inactive": len(inactive.data), "expired": len(expired.data)}
+
+    return results
+
+@app.get("/")
+async def root():
+    return {"message": "ULegacy API", "status": "running"}

@@ -2,18 +2,22 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ULegacy</title>
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
     <div class="container">
-        <!-- Header with role selector -->
+        <!-- Header -->
         <div class="header">
-            <h2>ULegacy</h2>
+            <div class="logo">
+                <span class="logo-icon">⚰️</span>
+                <span class="logo-text">ULegacy</span>
+            </div>
             <div class="role-selector">
                 <select id="roleSelect">
-                    <option value="owner">Owner</option>
-                    <option value="beneficiary">Beneficiary</option>
+                    <option value="owner">👤 Owner</option>
+                    <option value="beneficiary">🤝 Beneficiary</option>
                 </select>
             </div>
         </div>
@@ -27,52 +31,75 @@
         <!-- Owner Dashboard -->
         <div id="ownerDashboard" class="dashboard">
             <div class="section">
-                <h3>Your Accounts</h3>
+                <div class="section-header">
+                    <h3>Your Accounts</h3>
+                    <span class="account-count" id="accountCount">0</span>
+                </div>
                 <div id="accountList"></div>
-                <button id="addAccountBtn" class="btn btn-secondary">+ Add Account</button>
-                <div id="addAccountForm" class="hidden">
+                <button id="addAccountBtn" class="btn btn-secondary btn-sm">+ Add Account</button>
+                <div id="addAccountForm" class="hidden form-inline">
                     <select id="platformSelect">
                         <option value="facebook">Facebook</option>
                         <option value="google">Google</option>
                         <option value="instagram">Instagram</option>
+                        <option value="tiktok">TikTok</option>
+                        <option value="twitter">Twitter</option>
                     </select>
-                    <input type="text" id="usernameInput" placeholder="Username/Email">
-                    <input type="password" id="passwordInput" placeholder="Password">
-                    <button id="saveAccountBtn" class="btn btn-primary">Save</button>
-                    <button id="cancelAddBtn" class="btn btn-secondary">Cancel</button>
+                    <input type="text" id="usernameInput" placeholder="Username/Email" class="input-sm">
+                    <input type="password" id="passwordInput" placeholder="Password" class="input-sm">
+                    <div class="form-actions">
+                        <button id="saveAccountBtn" class="btn btn-primary btn-sm">Save</button>
+                        <button id="cancelAddBtn" class="btn btn-secondary btn-sm">Cancel</button>
+                    </div>
                 </div>
             </div>
 
             <div class="section">
-                <h3>Beneficiary</h3>
-                <input type="email" id="beneficiaryEmail" placeholder="beneficiary@email.com">
-                <button id="saveBeneficiaryBtn" class="btn btn-primary">Save</button>
+                <h3>👤 Beneficiary</h3>
+                <div class="form-row">
+                    <input type="email" id="beneficiaryEmail" placeholder="beneficiary@email.com" class="input-sm">
+                    <button id="saveBeneficiaryBtn" class="btn btn-primary btn-sm">Save</button>
+                </div>
             </div>
 
             <div class="section">
                 <h3>Recovery Key</h3>
                 <div class="key-row">
-                    <span id="recoveryKeyDisplay">Not set</span>
-                    <button id="copyKeyBtn" class="btn btn-icon" title="Copy key"><ion-icon name="copy-outline"></ion-icon></button>
+                    <span id="recoveryKeyDisplay" class="key-text">Not set</span>
+                    <button id="copyKeyBtn" class="btn btn-icon" title="Copy key">📋</button>
                 </div>
-                <button id="generateKeyBtn" class="btn btn-secondary">Generate New Key</button>
+                <button id="generateKeyBtn" class="btn btn-secondary btn-sm">Generate New Key</button>
+                <div class="key-warning">
+                    Save this key securely. It cannot be recovered if lost.
+                </div>
             </div>
 
             <div class="section">
-                <button id="resetTimerBtn" class="btn btn-danger">Reset Timer</button>
-                <p id="statusMessage"></p>
+                <button id="resetTimerBtn" class="btn btn-success btn-full">💚 I'm Alive (Reset Timer)</button>
+                <p id="statusMessage" class="status-message"></p>
+            </div>
+
+            <div class="section">
+                <button id="testTriggerBtn" class="btn btn-danger btn-full">Test Trigger (30-day simulation)</button>
             </div>
         </div>
 
         <!-- Beneficiary Dashboard -->
         <div id="beneficiaryDashboard" class="dashboard hidden">
             <div class="section">
-                <h3>Settlement Portal</h3>
-                <p>Enter the recovery key provided by the owner:</p>
-                <input type="password" id="beneficiaryKeyInput" placeholder="Recovery Key">
-                <button id="beneficiaryVerifyBtn" class="btn btn-primary">Verify & Load</button>
+                <h3>⚖️ Settlement Portal</h3>
+                <p class="help-text">Enter the recovery key provided by the owner:</p>
+                <input type="password" id="beneficiaryKeyInput" placeholder="Recovery Key" class="input-full">
+                <input type="text" id="beneficiaryUserIdInput" placeholder="User ID from email" class="input-full">
+                <button id="beneficiaryVerifyBtn" class="btn btn-primary btn-full">Verify & Load</button>
                 <div id="settlementAccounts" class="settlement-list"></div>
             </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <span class="version">v1.0.0</span>
+            <span class="status-dot" id="connectionStatus">●</span>
         </div>
     </div>
     <script type="module" src="popup.js"></script>

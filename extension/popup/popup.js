@@ -1,6 +1,6 @@
 // popup.js - ES Module
 
-// ---------- API Functions (inline, since imports aren't working) ----------
+// ---------- API Functions ----------
 const API_BASE = 'http://localhost:8000';
 
 async function callApi(endpoint, method = 'GET', body = null) {
@@ -37,6 +37,14 @@ async function verifyRecovery(userId, recoveryKey) {
     return callApi('/api/settlement/verify', 'POST', {
         user_id: userId,
         recovery_key: recoveryKey
+    });
+}
+
+async function registerUser(email, recoveryKey, beneficiaryEmail) {
+    return callApi('/api/users/register', 'POST', {
+        email,
+        recovery_key: recoveryKey,
+        beneficiary_email: beneficiaryEmail
     });
 }
 
@@ -103,9 +111,10 @@ async function hashKeyForServer(recoveryKey) {
 let currentRole = 'owner';
 let userId = null;
 let recoveryKey = null;
-let vault = {};
+let vault = { accounts: [] };
 let userStatus = 'active';
 let lastHeartbeat = null;
+let isRegistered = false;
 
 // DOM refs
 const roleSelect = document.getElementById('roleSelect');
@@ -113,19 +122,43 @@ const ownerDash = document.getElementById('ownerDashboard');
 const beneficiaryDash = document.getElementById('beneficiaryDashboard');
 const statusBadge = document.getElementById('statusBadge');
 const lastCheckEl = document.getElementById('lastCheck');
+const statusMessage = document.getElementById('statusMessage');
+const connectionStatus = document.getElementById('connectionStatus');
 
 // ---------- Load state from storage ----------
-chrome.storage.local.get(['userId', 'recoveryKey', 'vault', 'userStatus', 'lastHeartbeat'], (result) => {
+chrome.storage.local.get([
+    'userId', 'recoveryKey', 'vault', 'userStatus',
+    'lastHeartbeat', 'isRegistered'
+], async (result) => {
     userId = result.userId || null;
     recoveryKey = result.recoveryKey || null;
     if (result.vault) vault = result.vault;
     if (result.userStatus) userStatus = result.userStatus;
     if (result.lastHeartbeat) lastHeartbeat = result.lastHeartbeat;
+    if (result.isRegistered) isRegistered = result.isRegistered;
+
     updateStatusUI();
     renderOwnerDashboard();
+
+    // Check connection to backend
+    await checkConnection();
 });
 
-// ---------- Role switching (dropdown) ----------
+// ---------- Check Connection ----------
+async function checkConnection() {
+    try {
+        const response = await fetch(`${API_BASE}/`);
+        if (response.ok) {
+            connectionStatus.style.color = '#28a745';
+        } else {
+            connectionStatus.style.color = '#dc3545';
+        }
+    } catch (e) {
+        connectionStatus.style.color = '#dc3545';
+    }
+}
+
+// ---------- Role switching ----------
 roleSelect.addEventListener('change', () => {
     currentRole = roleSelect.value;
     if (currentRole === 'owner') {
@@ -148,8 +181,8 @@ function updateStatusUI() {
         badgeClass = 'badge-grace';
         label = 'Grace Period';
     } else if (userStatus === 'deceased' || userStatus === 'settled') {
-        badgeClass = 'badge-inactive';
-        label = 'Settled';
+        badgeClass = 'badge-settled';
+        label = userStatus === 'settled' ? 'Settled' : 'Deceased';
     }
     statusBadge.className = `badge ${badgeClass}`;
     statusBadge.textContent = `● ${label}`;
@@ -167,27 +200,40 @@ function renderOwnerDashboard() {
     const list = document.getElementById('accountList');
     if (!vault.accounts) vault.accounts = [];
     list.innerHTML = '';
+
+    if (vault.accounts.length === 0) {
+        list.innerHTML = '<div class="account-item" style="color:#6c757d;font-size:12px;border-left-color:#e9ecf2;">No accounts added yet</div>';
+    }
+
     vault.accounts.forEach((acc, index) => {
         const div = document.createElement('div');
         div.className = 'account-item';
         div.innerHTML = `
             <span class="platform">${acc.platform}</span>
-            <span>${acc.username}</span>
+            <span class="username">${acc.username}</span>
             <span class="status-badge status-active">Active</span>
             <button data-index="${index}" class="remove-account" title="Remove">✕</button>
         `;
         list.appendChild(div);
     });
+
+    document.getElementById('accountCount').textContent = vault.accounts.length;
+
     list.querySelectorAll('.remove-account').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             const idx = parseInt(e.target.dataset.index);
             vault.accounts.splice(idx, 1);
-            saveVaultLocal();
+            await saveVaultLocal();
             renderOwnerDashboard();
         });
     });
 
     document.getElementById('recoveryKeyDisplay').textContent = recoveryKey || 'Not set';
+
+    // Show beneficiary email if saved
+    if (vault.beneficiaryEmail) {
+        document.getElementById('beneficiaryEmail').value = vault.beneficiaryEmail;
+    }
 }
 
 // Copy key
@@ -201,22 +247,32 @@ document.getElementById('copyKeyBtn').addEventListener('click', () => {
     }
 });
 
+// Add Account
 document.getElementById('addAccountBtn').addEventListener('click', () => {
-    document.getElementById('addAccountForm').classList.remove('hidden');
+    document.getElementById('addAccountForm').classList.toggle('hidden');
 });
 
 document.getElementById('cancelAddBtn').addEventListener('click', () => {
     document.getElementById('addAccountForm').classList.add('hidden');
+    document.getElementById('usernameInput').value = '';
+    document.getElementById('passwordInput').value = '';
 });
 
 document.getElementById('saveAccountBtn').addEventListener('click', async () => {
     const platform = document.getElementById('platformSelect').value;
     const username = document.getElementById('usernameInput').value;
     const password = document.getElementById('passwordInput').value;
+
     if (!username || !password) {
-        alert('Please fill in all fields');
+        showStatus('Please fill in all fields', 'error');
         return;
     }
+
+    if (!recoveryKey) {
+        showStatus('Please generate a Recovery Key first', 'error');
+        return;
+    }
+
     if (!vault.accounts) vault.accounts = [];
     vault.accounts.push({ platform, username, password });
     await saveVaultLocal();
@@ -224,53 +280,124 @@ document.getElementById('saveAccountBtn').addEventListener('click', async () => 
     document.getElementById('addAccountForm').classList.add('hidden');
     document.getElementById('usernameInput').value = '';
     document.getElementById('passwordInput').value = '';
+    showStatus('Account added successfully', 'success');
 });
 
+// Save Beneficiary
 document.getElementById('saveBeneficiaryBtn').addEventListener('click', async () => {
     const email = document.getElementById('beneficiaryEmail').value;
-    if (!email) return;
+    if (!email) {
+        showStatus('Please enter an email', 'error');
+        return;
+    }
+    if (!email.includes('@')) {
+        showStatus('Please enter a valid email', 'error');
+        return;
+    }
     vault.beneficiaryEmail = email;
     await saveVaultLocal();
-    alert('Beneficiary saved');
+    showStatus('Beneficiary saved', 'success');
 });
 
+// Generate Recovery Key
 document.getElementById('generateKeyBtn').addEventListener('click', async () => {
     const array = new Uint8Array(32);
     crypto.getRandomValues(array);
     recoveryKey = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
     await chrome.storage.local.set({ recoveryKey });
     document.getElementById('recoveryKeyDisplay').textContent = recoveryKey;
-    alert('New Recovery Key generated. Save it securely!');
+    showStatus('New Recovery Key generated! Save it securely.', 'success');
     await saveVaultLocal();
 });
 
+// Reset Timer (I'm Alive)
 document.getElementById('resetTimerBtn').addEventListener('click', async () => {
     if (!userId) {
-        const email = prompt('Enter your email to register:');
-        if (!email) return;
-        userId = 'demo-user-' + Date.now();
-        await chrome.storage.local.set({ userId });
+        await registerUserWithBackend();
+        if (!userId) return;
     }
+
     try {
-        await sendHeartbeat(userId);
-        document.getElementById('statusMessage').textContent = '✅ Timer reset!';
-        userStatus = 'active';
-        lastHeartbeat = new Date().toISOString();
+        const result = await sendHeartbeat(userId);
+        const now = new Date().toISOString();
+        userStatus = result.user_status || 'active';
+        lastHeartbeat = now;
         await chrome.storage.local.set({ userStatus, lastHeartbeat });
         updateStatusUI();
+        showStatus('✅ Timer reset successfully!', 'success');
     } catch (e) {
-        document.getElementById('statusMessage').textContent = '❌ Error resetting timer';
+        showStatus('❌ Error resetting timer: ' + e.message, 'error');
     }
 });
 
+// Test Trigger (30-day simulation)
+document.getElementById('testTriggerBtn').addEventListener('click', async () => {
+    if (!userId) {
+        await registerUserWithBackend();
+        if (!userId) return;
+    }
+
+    try {
+        // Simulate 30-day inactivity by updating last_heartbeat to 31 days ago
+        const oldDate = new Date();
+        oldDate.setDate(oldDate.getDate() - 31);
+        const response = await fetch(`${API_BASE}/api/admin/simulate-inactivity`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, date: oldDate.toISOString() })
+        });
+        if (response.ok) {
+            showStatus('🧪 Test triggered! Check grace period status.', 'success');
+            // Refresh status
+            chrome.storage.local.get(['userStatus'], (result) => {
+                if (result.userStatus) {
+                    userStatus = result.userStatus;
+                    updateStatusUI();
+                }
+            });
+        } else {
+            showStatus('❌ Test failed: ' + await response.text(), 'error');
+        }
+    } catch (e) {
+        showStatus('❌ Test failed: ' + e.message, 'error');
+    }
+});
+
+// ---------- Register User ----------
+async function registerUserWithBackend() {
+    const email = prompt('Enter your email to register:');
+    if (!email) return false;
+
+    if (!recoveryKey) {
+        showStatus('Please generate a Recovery Key first', 'error');
+        return false;
+    }
+
+    try {
+        const beneficiaryEmail = vault.beneficiaryEmail || null;
+        const result = await registerUser(email, recoveryKey, beneficiaryEmail);
+        userId = result.id;
+        isRegistered = true;
+        await chrome.storage.local.set({ userId, isRegistered });
+        showStatus('✅ Registered successfully!', 'success');
+        return true;
+    } catch (e) {
+        showStatus('❌ Registration failed: ' + e.message, 'error');
+        return false;
+    }
+}
+
+// ---------- Save Vault ----------
 async function saveVaultLocal() {
     if (!recoveryKey) {
-        alert('Please generate a Recovery Key first');
+        showStatus('Please generate a Recovery Key first', 'error');
         return;
     }
+
     const encrypted = await encryptData(vault, recoveryKey);
     await chrome.storage.local.set({ vault: vault });
-    if (userId) {
+
+    if (userId && isRegistered) {
         const encryptedStr = JSON.stringify(encrypted);
         const metadata = { accounts: vault.accounts.map(a => ({ platform: a.platform })) };
         try {
@@ -285,48 +412,83 @@ async function saveVaultLocal() {
 // ---------- Beneficiary Functions ----------
 document.getElementById('beneficiaryVerifyBtn').addEventListener('click', async () => {
     const key = document.getElementById('beneficiaryKeyInput').value;
-    if (!key) {
-        alert('Enter the recovery key');
+    const userIdInput = document.getElementById('beneficiaryUserIdInput').value;
+
+    if (!key || !userIdInput) {
+        showStatus('Please enter both Recovery Key and User ID', 'error');
         return;
     }
-    const userIdFromEmail = prompt('Enter the User ID from the settlement email:');
-    if (!userIdFromEmail) return;
 
     try {
-        const result = await verifyRecovery(userIdFromEmail, key);
+        const result = await verifyRecovery(userIdInput, key);
         if (result.settlement_token) {
-            const vaultData = await getVault(userIdFromEmail);
+            const vaultData = await getVault(userIdInput);
             if (vaultData.encrypted_data) {
                 const encObj = JSON.parse(vaultData.encrypted_data);
                 const decrypted = await decryptData(encObj, key);
+
                 const container = document.getElementById('settlementAccounts');
-                container.innerHTML = '<h4>Accounts to Delete</h4>';
+                container.innerHTML = '<h4 style="font-size:13px;margin-bottom:8px;">📋 Accounts to Delete</h4>';
+
+                if (!decrypted.accounts || decrypted.accounts.length === 0) {
+                    container.innerHTML += '<p style="color:#6c757d;font-size:12px;">No accounts found</p>';
+                    return;
+                }
+
                 decrypted.accounts.forEach((acc, idx) => {
                     const div = document.createElement('div');
                     div.className = 'account-item';
                     div.innerHTML = `
                         <span class="platform">${acc.platform}</span>
-                        <span>${acc.username}</span>
-                        <button class="delete-account-btn" data-idx="${idx}">Delete</button>
+                        <span class="username">${acc.username}</span>
+                        <button class="delete-account-btn" data-idx="${idx}" data-platform="${acc.platform}">Delete</button>
                     `;
                     container.appendChild(div);
                 });
+
                 container.querySelectorAll('.delete-account-btn').forEach(btn => {
                     btn.addEventListener('click', async (e) => {
                         const idx = parseInt(e.target.dataset.idx);
+                        const platform = e.target.dataset.platform;
                         const account = decrypted.accounts[idx];
-                        alert(`Simulating deletion of ${account.platform}...`);
-                        await callApi('/api/settlement/complete', 'POST', { user_id: userIdFromEmail });
-                        e.target.textContent = 'Deleted';
-                        e.target.disabled = true;
+
+                        if (confirm(`Are you sure you want to delete ${platform} account (${account.username})? This cannot be undone.`)) {
+                            // Start guided deletion
+                            chrome.runtime.sendMessage({
+                                type: 'start_guide',
+                                platform: platform
+                            });
+
+                            showStatus(`🗑️ Deleting ${platform}... Follow the guided steps.`, 'success');
+
+                            // In production: mark as deleted after completion
+                            // For demo: we'll just update UI
+                            e.target.textContent = 'Deleted';
+                            e.target.disabled = true;
+                            e.target.style.background = '#6c757d';
+                        }
                     });
                 });
+
+                showStatus('✅ Settlement loaded successfully', 'success');
             }
         }
     } catch (e) {
-        alert('Verification failed: ' + e.message);
+        showStatus('❌ Verification failed: ' + e.message, 'error');
     }
 });
+
+// ---------- Helpers ----------
+function showStatus(message, type = 'info') {
+    statusMessage.textContent = message;
+    statusMessage.className = 'status-message';
+    if (type === 'success') statusMessage.classList.add('success');
+    if (type === 'error') statusMessage.classList.add('error');
+    setTimeout(() => {
+        statusMessage.textContent = '';
+        statusMessage.className = 'status-message';
+    }, 5000);
+}
 
 // ---------- Init ----------
 chrome.storage.local.get(['userId'], (result) => {
