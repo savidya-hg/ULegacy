@@ -52,7 +52,8 @@ async def complete_settlement(req: SettlementTriggerRequest):
 
     supabase.table("audit_logs").insert({
         "user_id": req.user_id,
-        "action": "settlement_complete"
+        "action": "settlement_complete",
+        "metadata": {"settled_at": datetime.utcnow().isoformat()}
     }).execute()
 
     return {"status": "complete"}

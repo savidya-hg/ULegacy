@@ -1,30 +1,39 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ULegacy</title>
     <link rel="stylesheet" href="popup.css">
 </head>
+
 <body>
     <div class="container">
         <!-- Header -->
         <div class="header">
             <div class="logo">
-                <span class="logo-icon">⚰️</span>
+                <span class="logo-icon">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round" style="color: #4a00e0;">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        <path d="M12 8v4" />
+                        <path d="M12 16h.01" />
+                    </svg>
+                </span>
                 <span class="logo-text">ULegacy</span>
             </div>
             <div class="role-selector">
                 <select id="roleSelect">
-                    <option value="owner">👤 Owner</option>
-                    <option value="beneficiary">🤝 Beneficiary</option>
+                    <option value="owner">Owner</option>
+                    <option value="beneficiary">Beneficiary</option>
                 </select>
             </div>
         </div>
 
         <!-- Status Bar -->
         <div class="status-bar">
-            <span id="statusBadge" class="badge badge-active">● Active</span>
+            <span id="statusBadge" class="badge badge-active">Active</span>
             <span id="lastCheck" class="last-check">Last check: never</span>
         </div>
 
@@ -55,9 +64,19 @@
             </div>
 
             <div class="section">
-                <h3>👤 Beneficiary</h3>
+                <h3>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display:inline-block; vertical-align:middle; margin-right:4px;">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    <span style="vertical-align:middle;">Beneficiary</span>
+                </h3>
                 <div class="form-row">
-                    <input type="email" id="beneficiaryEmail" placeholder="beneficiary@email.com" class="input-sm">
+                    <input type="email" id="beneficiaryEmail" placeholder="Beneficiary@email.com" class="input-sm">
                     <button id="saveBeneficiaryBtn" class="btn btn-primary btn-sm">Save</button>
                 </div>
             </div>
@@ -66,7 +85,13 @@
                 <h3>Recovery Key</h3>
                 <div class="key-row">
                     <span id="recoveryKeyDisplay" class="key-text">Not set</span>
-                    <button id="copyKeyBtn" class="btn btn-icon" title="Copy key">📋</button>
+                    <button id="copyKeyBtn" class="btn btn-icon" title="Copy key">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #6c757d;">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                    </button>
                 </div>
                 <button id="generateKeyBtn" class="btn btn-secondary btn-sm">Generate New Key</button>
                 <div class="key-warning">
@@ -75,7 +100,15 @@
             </div>
 
             <div class="section">
-                <button id="resetTimerBtn" class="btn btn-success btn-full">💚 I'm Alive (Reset Timer)</button>
+                <button id="resetTimerBtn" class="btn btn-success btn-full">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display:inline-block; vertical-align:middle; margin-right:4px;">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <span style="vertical-align:middle;">I'm Alive (Reset Timer)</span>
+                </button>
                 <p id="statusMessage" class="status-message"></p>
             </div>
 
@@ -87,7 +120,15 @@
         <!-- Beneficiary Dashboard -->
         <div id="beneficiaryDashboard" class="dashboard hidden">
             <div class="section">
-                <h3>⚖️ Settlement Portal</h3>
+                <h3>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display:inline-block; vertical-align:middle; margin-right:4px;">
+                        <path
+                            d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7H1.5M12 2v20M21 6l-3 1m0 0l3 9a5.002 5.002 0 01-6.001 0M18 7l-3 9M18 7H22.5" />
+                    </svg>
+                    <span style="vertical-align:middle;">Settlement Portal</span>
+                </h3>
                 <p class="help-text">Enter the recovery key provided by the owner:</p>
                 <input type="password" id="beneficiaryKeyInput" placeholder="Recovery Key" class="input-full">
                 <input type="text" id="beneficiaryUserIdInput" placeholder="User ID from email" class="input-full">
@@ -104,4 +145,5 @@
     </div>
     <script type="module" src="popup.js"></script>
 </body>
+
 </html>

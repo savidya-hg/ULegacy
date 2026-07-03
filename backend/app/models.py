@@ -5,16 +5,17 @@ from datetime import datetime
 class UserBase(BaseModel):
     email: EmailStr
     beneficiary_email: Optional[EmailStr] = None
-    beneficiary_phone: Optional[str] = None
 
 class UserCreate(UserBase):
     recovery_key: str
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
     id: str
+    email: str
     status: str
-    last_heartbeat: datetime
-    created_at: datetime
+    last_heartbeat: str
+    created_at: str
+    beneficiary_email: Optional[str] = None
 
 class HeartbeatRequest(BaseModel):
     user_id: str
@@ -35,4 +36,7 @@ class UserRegisterRequest(BaseModel):
     email: EmailStr
     recovery_key: str
     beneficiary_email: Optional[EmailStr] = None
-    beneficiary_phone: Optional[str] = None
+
+class SimulateInactivityRequest(BaseModel):
+    user_id: str
+    date: Optional[str] = None

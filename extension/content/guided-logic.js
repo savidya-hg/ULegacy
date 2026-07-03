@@ -120,7 +120,7 @@ function processStep() {
                         processStep();
                     });
                 } else {
-                    showTooltip('⚠️ Cannot find element. Please click it manually.', null);
+                    showTooltip('Cannot find element. Please click it manually.', null);
                     // Manual override: user clicks next
                     currentStep++;
                     processStep();
@@ -137,7 +137,7 @@ function processStep() {
                     input.value = password;
                     // Trigger change event
                     input.dispatchEvent(new Event('input', { bubbles: true }));
-                    showTooltip('✅ Password entered', () => {
+                    showTooltip('Password entered', () => {
                         currentStep++;
                         processStep();
                     });
@@ -215,7 +215,7 @@ function showTooltip(instruction, onNext) {
 
 function completeGuide() {
     isActive = false;
-    showTooltip('✅ Account deletion completed!', null);
+    showTooltip('Account deletion completed!', null);
     setTimeout(() => {
         const tooltip = document.querySelector('.ulegacy-guide-tooltip');
         if (tooltip) tooltip.remove();

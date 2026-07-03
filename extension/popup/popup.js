@@ -99,14 +99,6 @@ async function decryptData(encryptedObj, recoveryKey) {
     return JSON.parse(new TextDecoder().decode(decrypted));
 }
 
-async function hashKeyForServer(recoveryKey) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(recoveryKey + 'ulegacy_salt');
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 // ---------- State ----------
 let currentRole = 'owner';
 let userId = null;
@@ -125,17 +117,31 @@ const lastCheckEl = document.getElementById('lastCheck');
 const statusMessage = document.getElementById('statusMessage');
 const connectionStatus = document.getElementById('connectionStatus');
 
-// ---------- Load state from storage ----------
+// ---------- Load state from storage (single init point) ----------
 chrome.storage.local.get([
-    'userId', 'recoveryKey', 'vault', 'userStatus',
-    'lastHeartbeat', 'isRegistered'
+    'userId', 'recoveryKey', 'encryptedVault', 'userStatus',
+    'lastHeartbeat', 'isRegistered', 'beneficiaryEmail'
 ], async (result) => {
     userId = result.userId || null;
     recoveryKey = result.recoveryKey || null;
-    if (result.vault) vault = result.vault;
     if (result.userStatus) userStatus = result.userStatus;
     if (result.lastHeartbeat) lastHeartbeat = result.lastHeartbeat;
     if (result.isRegistered) isRegistered = result.isRegistered;
+
+    // Decrypt vault from local storage if we have the key
+    if (result.encryptedVault && recoveryKey) {
+        try {
+            vault = await decryptData(result.encryptedVault, recoveryKey);
+        } catch (e) {
+            console.warn('Failed to decrypt local vault, starting fresh:', e);
+            vault = { accounts: [] };
+        }
+    }
+
+    // Restore beneficiary email into vault if it was saved separately
+    if (result.beneficiaryEmail) {
+        vault.beneficiaryEmail = result.beneficiaryEmail;
+    }
 
     updateStatusUI();
     renderOwnerDashboard();
@@ -185,7 +191,7 @@ function updateStatusUI() {
         label = userStatus === 'settled' ? 'Settled' : 'Deceased';
     }
     statusBadge.className = `badge ${badgeClass}`;
-    statusBadge.textContent = `● ${label}`;
+    statusBadge.textContent = label;
 
     if (lastHeartbeat) {
         const date = new Date(lastHeartbeat);
@@ -241,8 +247,13 @@ document.getElementById('copyKeyBtn').addEventListener('click', () => {
     if (recoveryKey) {
         navigator.clipboard.writeText(recoveryKey).then(() => {
             const btn = document.getElementById('copyKeyBtn');
-            btn.textContent = '✅';
-            setTimeout(() => btn.textContent = '📋', 1500);
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: #28a745;">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+            `;
+            setTimeout(() => btn.innerHTML = originalHTML, 1500);
         });
     }
 });
@@ -295,6 +306,8 @@ document.getElementById('saveBeneficiaryBtn').addEventListener('click', async ()
         return;
     }
     vault.beneficiaryEmail = email;
+    // Save beneficiary email separately (unencrypted — it's not sensitive)
+    await chrome.storage.local.set({ beneficiaryEmail: email });
     await saveVaultLocal();
     showStatus('Beneficiary saved', 'success');
 });
@@ -312,7 +325,7 @@ document.getElementById('generateKeyBtn').addEventListener('click', async () => 
 
 // Reset Timer (I'm Alive)
 document.getElementById('resetTimerBtn').addEventListener('click', async () => {
-    if (!userId) {
+    if (!userId || !isRegistered) {
         await registerUserWithBackend();
         if (!userId) return;
     }
@@ -324,21 +337,21 @@ document.getElementById('resetTimerBtn').addEventListener('click', async () => {
         lastHeartbeat = now;
         await chrome.storage.local.set({ userStatus, lastHeartbeat });
         updateStatusUI();
-        showStatus('✅ Timer reset successfully!', 'success');
+        showStatus('Timer reset successfully!', 'success');
     } catch (e) {
-        showStatus('❌ Error resetting timer: ' + e.message, 'error');
+        showStatus('Error resetting timer: ' + e.message, 'error');
     }
 });
 
 // Test Trigger (30-day simulation)
 document.getElementById('testTriggerBtn').addEventListener('click', async () => {
-    if (!userId) {
+    if (!userId || !isRegistered) {
         await registerUserWithBackend();
         if (!userId) return;
     }
 
     try {
-        // Simulate 30-day inactivity by updating last_heartbeat to 31 days ago
+        // Simulate 30-day inactivity
         const oldDate = new Date();
         oldDate.setDate(oldDate.getDate() - 31);
         const response = await fetch(`${API_BASE}/api/admin/simulate-inactivity`, {
@@ -347,19 +360,20 @@ document.getElementById('testTriggerBtn').addEventListener('click', async () => 
             body: JSON.stringify({ user_id: userId, date: oldDate.toISOString() })
         });
         if (response.ok) {
-            showStatus('🧪 Test triggered! Check grace period status.', 'success');
-            // Refresh status
-            chrome.storage.local.get(['userStatus'], (result) => {
-                if (result.userStatus) {
-                    userStatus = result.userStatus;
-                    updateStatusUI();
-                }
-            });
+            // Now trigger the check
+            const checkResponse = await fetch(`${API_BASE}/api/admin/check-inactive`);
+            if (checkResponse.ok) {
+                const checkResult = await checkResponse.json();
+                userStatus = 'grace_period';
+                await chrome.storage.local.set({ userStatus });
+                updateStatusUI();
+                showStatus('Test triggered! Status: Grace Period. Check your email.', 'success');
+            }
         } else {
-            showStatus('❌ Test failed: ' + await response.text(), 'error');
+            showStatus('Test failed: ' + await response.text(), 'error');
         }
     } catch (e) {
-        showStatus('❌ Test failed: ' + e.message, 'error');
+        showStatus('Test failed: ' + e.message, 'error');
     }
 });
 
@@ -379,24 +393,26 @@ async function registerUserWithBackend() {
         userId = result.id;
         isRegistered = true;
         await chrome.storage.local.set({ userId, isRegistered });
-        showStatus('✅ Registered successfully!', 'success');
+        showStatus('Registered successfully!', 'success');
         return true;
     } catch (e) {
-        showStatus('❌ Registration failed: ' + e.message, 'error');
+        showStatus('Registration failed: ' + e.message, 'error');
         return false;
     }
 }
 
-// ---------- Save Vault ----------
+// ---------- Save Vault (encrypted in local storage + server sync) ----------
 async function saveVaultLocal() {
     if (!recoveryKey) {
         showStatus('Please generate a Recovery Key first', 'error');
         return;
     }
 
+    // Encrypt vault before storing locally (Zero-Knowledge: never store plaintext)
     const encrypted = await encryptData(vault, recoveryKey);
-    await chrome.storage.local.set({ vault: vault });
+    await chrome.storage.local.set({ encryptedVault: encrypted });
 
+    // Also sync encrypted vault to server if registered
     if (userId && isRegistered) {
         const encryptedStr = JSON.stringify(encrypted);
         const metadata = { accounts: vault.accounts.map(a => ({ platform: a.platform })) };
@@ -428,7 +444,19 @@ document.getElementById('beneficiaryVerifyBtn').addEventListener('click', async 
                 const decrypted = await decryptData(encObj, key);
 
                 const container = document.getElementById('settlementAccounts');
-                container.innerHTML = '<h4 style="font-size:13px;margin-bottom:8px;">📋 Accounts to Delete</h4>';
+                container.innerHTML = `
+                    <h4 style="font-size:13px;margin-bottom:8px;">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-right:4px; color: #dc3545;">
+                            <line x1="8" y1="6" x2="21" y2="6"/>
+                            <line x1="8" y1="12" x2="21" y2="12"/>
+                            <line x1="8" y1="18" x2="21" y2="18"/>
+                            <line x1="3" y1="6" x2="3.01" y2="6"/>
+                            <line x1="3" y1="12" x2="3.01" y2="12"/>
+                            <line x1="3" y1="18" x2="3.01" y2="18"/>
+                        </svg>
+                        <span style="vertical-align:middle;">Accounts to Delete</span>
+                    </h4>
+                `;
 
                 if (!decrypted.accounts || decrypted.accounts.length === 0) {
                     container.innerHTML += '<p style="color:#6c757d;font-size:12px;">No accounts found</p>';
@@ -459,10 +487,8 @@ document.getElementById('beneficiaryVerifyBtn').addEventListener('click', async 
                                 platform: platform
                             });
 
-                            showStatus(`🗑️ Deleting ${platform}... Follow the guided steps.`, 'success');
+                            showStatus(`Deleting ${platform}... Follow the guided steps.`, 'success');
 
-                            // In production: mark as deleted after completion
-                            // For demo: we'll just update UI
                             e.target.textContent = 'Deleted';
                             e.target.disabled = true;
                             e.target.style.background = '#6c757d';
@@ -470,11 +496,11 @@ document.getElementById('beneficiaryVerifyBtn').addEventListener('click', async 
                     });
                 });
 
-                showStatus('✅ Settlement loaded successfully', 'success');
+                showStatus('Settlement loaded successfully', 'success');
             }
         }
     } catch (e) {
-        showStatus('❌ Verification failed: ' + e.message, 'error');
+        showStatus('Verification failed: ' + e.message, 'error');
     }
 });
 
@@ -489,14 +515,3 @@ function showStatus(message, type = 'info') {
         statusMessage.className = 'status-message';
     }, 5000);
 }
-
-// ---------- Init ----------
-chrome.storage.local.get(['userId'], (result) => {
-    if (!result.userId) {
-        const newId = 'demo-' + Date.now();
-        chrome.storage.local.set({ userId: newId });
-        userId = newId;
-    } else {
-        userId = result.userId;
-    }
-});

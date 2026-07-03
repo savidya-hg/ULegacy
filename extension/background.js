@@ -108,13 +108,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // When extension is installed
 chrome.runtime.onInstalled.addListener(() => {
     console.log('ULegacy installed');
-
-    // Create demo user ID for first-time users
-    chrome.storage.local.get(['userId'], (result) => {
-        if (!result.userId) {
-            const newId = 'demo-' + Date.now();
-            chrome.storage.local.set({ userId: newId });
-            userId = newId;
-        }
-    });
 });
