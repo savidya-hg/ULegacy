@@ -17,8 +17,6 @@
     "https://*.google.com/*",
     "https://*.instagram.com/*",
     "https://*.tiktok.com/*",
-    "https://*.twitter.com/*",
-    "https://*.x.com/*",
     "http://localhost:8000/*",
     "https://ulegacy.com/*"
   ],
@@ -40,9 +38,7 @@
         "https://*.facebook.com/*",
         "https://*.google.com/*",
         "https://*.instagram.com/*",
-        "https://*.tiktok.com/*",
-        "https://*.twitter.com/*",
-        "https://*.x.com/*"
+        "https://*.tiktok.com/*"
       ],
       "js": [
         "content/privacy-shield.js",

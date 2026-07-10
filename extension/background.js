@@ -27,8 +27,7 @@ const PLATFORM_LOGIN_URLS = {
     facebook: 'https://www.facebook.com/login',
     google: 'https://accounts.google.com/signin',
     instagram: 'https://www.instagram.com/accounts/login/',
-    tiktok: 'https://www.tiktok.com/login',
-    twitter: 'https://twitter.com/i/flow/login'
+    tiktok: 'https://www.tiktok.com/login'
 };
 
 // ---------- State ----------
@@ -98,7 +97,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // --- Open Settlement Tab (NEW — CF1 fix) ---
     // Called by the popup when the beneficiary clicks "Delete" on an account.
-    // Opens a new tab to the platform's login page and stores credentials
+    // Opens a new floating popup window to the platform's login page and stores credentials
     // in chrome.storage.session so content scripts can auto-fill them.
     if (message.type === 'open_settlement_tab') {
         const { platform, username, password } = message.data;
@@ -110,16 +109,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         // Store credentials and settlement mode flag in session storage
-        // (session storage is cleared when the browser closes — never persisted to disk)
         chrome.storage.session.set({
             settlementMode: true,
             settlementPlatform: platform,
             settlementCredentials: { username, password }
         }, () => {
-            // Open a new tab to the platform login page
-            chrome.tabs.create({ url: loginUrl }, (tab) => {
-                console.log(`Settlement tab opened for ${platform}: tab ${tab.id}`);
-                sendResponse({ status: 'ok', tabId: tab.id });
+            // Open a floating popup window to the platform login page
+            chrome.windows.create({
+                url: loginUrl,
+                type: 'popup',
+                width: 1280,
+                height: 720,
+                focused: true
+            }, (win) => {
+                const tab = win.tabs ? win.tabs[0] : null;
+                console.log(`Settlement window opened for ${platform}: win ${win.id}`);
+                sendResponse({ status: 'ok', tabId: tab?.id, windowId: win.id });
             });
         });
         return true;
@@ -127,7 +132,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // --- Settlement Account Deleted (from content script) ---
     // When the guided deletion completes, the content script notifies us.
-    // We relay this back to any open popup.
+    // We close the temporary window and relay this back to any open popup.
     if (message.type === 'settlement_account_deleted') {
         const { platform } = message.data || {};
         console.log(`Account deleted: ${platform}`);
@@ -138,6 +143,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             settlementPlatform: null,
             settlementCredentials: null
         });
+
+        // Close the temporary popup window
+        if (sender.tab && sender.tab.windowId) {
+            chrome.windows.remove(sender.tab.windowId, () => {
+                console.log(`Closed settlement window for ${platform}`);
+            });
+        }
 
         // Broadcast to popup (it will update the dashboard)
         chrome.runtime.sendMessage({

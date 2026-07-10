@@ -39,13 +39,6 @@ const PLATFORM_STEPS = {
         { type: 'wait', selector: 'button', instruction: 'Waiting for page to load...' },
         { type: 'captcha_check', instruction: 'Checking for security verification...' },
         { type: 'click', text: 'Delete', instruction: 'Click Delete Account' }
-    ],
-    twitter: [
-        { type: 'navigate', url: '/settings/deactivate', instruction: 'Opening Twitter deactivation page...' },
-        { type: 'wait', selector: 'input[type="password"]', instruction: 'Waiting for verification...' },
-        { type: 'fill_password', instruction: 'Entering password...' },
-        { type: 'captcha_check', instruction: 'Checking for security verification...' },
-        { type: 'click', text: 'Deactivate', instruction: 'Confirm deactivation' }
     ]
 };
 
@@ -102,65 +95,58 @@ function isLoginPage() {
 function autoFillLogin() {
     if (!storedCredentials) return;
 
-    showTooltip('Logging in automatically...', null);
+    showTooltip('Waiting for login form...', null);
 
-    // Try to fill username/email
-    const usernameSelectors = [
-        'input[type="email"]',
-        'input[type="text"][name="email"]',
-        'input[name="username"]',
-        'input[name="email"]',
-        'input[autocomplete="username"]',
-        'input[type="text"]'
-    ];
-
-    const passwordSelectors = [
-        'input[type="password"]',
-        'input[name="password"]',
-        'input[autocomplete="current-password"]'
-    ];
-
-    let usernameFilled = false;
-    let passwordFilled = false;
-
-    for (const selector of usernameSelectors) {
-        const el = document.querySelector(selector);
-        if (el) {
-            fillInput(el, storedCredentials.username);
-            usernameFilled = true;
-            break;
+    // Wait for the password field (if password field is loaded, username field is definitely loaded too)
+    waitForElement('input[type="password"], input[name="password"]', (passwordField) => {
+        if (!passwordField) {
+            console.warn('ULegacy: Login form fields not found');
+            showTooltip('Unable to find login form. Please log in manually.', null);
+            return;
         }
-    }
 
-    for (const selector of passwordSelectors) {
-        const el = document.querySelector(selector);
-        if (el) {
-            fillInput(el, storedCredentials.password);
-            passwordFilled = true;
-            break;
-        }
-    }
+        showTooltip('Logging in automatically...', null);
 
-    if (usernameFilled && passwordFilled) {
-        showTooltip('Credentials entered. Click the login button or press Enter.', null);
-        // Try to find and click the submit button
-        setTimeout(() => {
-            const submitBtn = document.querySelector(
-                'button[type="submit"], input[type="submit"], button[name="login"]'
-            ) || findByText('Log In') || findByText('Sign In') || findByText('Login') || findByText('Next');
+        // Try to fill username/email
+        const usernameSelectors = [
+            'input[name="username"]',
+            'input[type="email"]',
+            'input[type="text"][name="email"]',
+            'input[name="email"]',
+            'input[autocomplete="username"]',
+            'input[type="text"]'
+        ];
 
-            if (submitBtn) {
-                submitBtn.click();
+        let usernameFilled = false;
+        let passwordFilled = false;
+
+        for (const selector of usernameSelectors) {
+            const el = document.querySelector(selector);
+            if (el) {
+                fillInput(el, storedCredentials.username);
+                usernameFilled = true;
+                break;
             }
-        }, 500);
-    } else if (usernameFilled) {
-        // Some platforms (Google) have a two-step login — fill username first
-        showTooltip('Email entered. Please proceed to the next step.', null);
-        setTimeout(() => {
-            const nextBtn = findByText('Next') || document.querySelector('button[type="submit"]');
-            if (nextBtn) nextBtn.click();
-        }, 500);
-    }
+        }
+
+        // Fill password using the matched element
+        fillInput(passwordField, storedCredentials.password);
+        passwordFilled = true;
+
+        if (usernameFilled && passwordFilled) {
+            showTooltip('Credentials entered. Logging in...', null);
+            // Try to find and click the submit button
+            setTimeout(() => {
+                const submitBtn = document.querySelector(
+                    'button[type="submit"], input[type="submit"], button[name="login"]'
+                ) || findByText('Log In') || findByText('Sign In') || findByText('Login') || findByText('Next');
+
+                if (submitBtn) {
+                    submitBtn.click();
+                }
+            }, 800);
+        }
+    }, 10000);
 }
 
 function startGuide(platform) {

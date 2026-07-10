@@ -124,6 +124,7 @@ let userStatus = 'active';
 let lastHeartbeat = null;
 let isRegistered = false;
 let ownerEmail = null;
+let beneficiarySession = null; // Stores { userId, recoveryKey, decryptedVault }
 let settlementUserId = null; // For beneficiary: the owner's user ID
 
 // DOM refs
@@ -166,6 +167,29 @@ chrome.storage.local.get([
     updateRegistrationUI();
     renderOwnerDashboard();
 
+    // Check if there is an active beneficiary session in progress (session-only, in-memory)
+    if (chrome.storage.session) {
+        chrome.storage.session.get(['beneficiarySession'], (sessionRes) => {
+            if (sessionRes.beneficiarySession) {
+                beneficiarySession = sessionRes.beneficiarySession;
+                settlementUserId = beneficiarySession.userId;
+                
+                // Populate inputs
+                document.getElementById('beneficiaryKeyInput').value = beneficiarySession.recoveryKey;
+                document.getElementById('beneficiaryUserIdInput').value = beneficiarySession.userId;
+
+                // Auto-switch UI to beneficiary role
+                roleSelect.value = 'beneficiary';
+                currentRole = 'beneficiary';
+                ownerDash.classList.add('hidden');
+                beneficiaryDash.classList.remove('hidden');
+
+                // Render dashboard directly
+                renderSettlementDashboard(beneficiarySession.decryptedVault, beneficiarySession.recoveryKey);
+            }
+        });
+    }
+
     // Check connection to backend
     await checkConnection();
 });
@@ -174,13 +198,24 @@ chrome.storage.local.get([
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'account_deletion_complete') {
         const platform = message.platform;
-        // Update the UI to show this account as deleted
+        
+        // 1. Update visual UI buttons
         const buttons = document.querySelectorAll(`.delete-account-btn[data-platform="${platform}"]`);
         buttons.forEach(btn => {
             btn.textContent = 'Deleted ✓';
             btn.disabled = true;
             btn.style.background = '#6c757d';
         });
+
+        // 2. Update memory and storage state
+        if (beneficiarySession && beneficiarySession.decryptedVault) {
+            const acc = beneficiarySession.decryptedVault.accounts.find(a => a.platform === platform);
+            if (acc) {
+                acc.deleted = true;
+                chrome.storage.session.set({ beneficiarySession });
+            }
+        }
+
         showStatus(`${platform} account deleted successfully!`, 'success');
         checkAllAccountsDeleted();
     }
@@ -544,8 +579,17 @@ document.getElementById('beneficiaryVerifyBtn').addEventListener('click', async 
                 const encObj = JSON.parse(vaultData.encrypted_data);
                 const decrypted = await decryptData(encObj, key);
 
-                renderSettlementDashboard(decrypted, key);
-                showStatus('Settlement loaded successfully', 'success');
+                // Save beneficiary session in memory-only storage
+                beneficiarySession = {
+                    userId: userIdInput,
+                    recoveryKey: key,
+                    decryptedVault: decrypted
+                };
+                
+                chrome.storage.session.set({ beneficiarySession }, () => {
+                    renderSettlementDashboard(decrypted, key);
+                    showStatus('Settlement loaded successfully', 'success');
+                });
             }
         }
     } catch (e) {
@@ -578,10 +622,14 @@ function renderSettlementDashboard(decrypted, recoveryKeyForVault) {
     decrypted.accounts.forEach((acc, idx) => {
         const div = document.createElement('div');
         div.className = 'account-item';
+        
+        const isDeleted = acc.deleted === true;
         div.innerHTML = `
             <span class="platform">${acc.platform}</span>
             <span class="username">${acc.username}</span>
-            <button class="delete-account-btn" data-idx="${idx}" data-platform="${acc.platform}">Delete</button>
+            <button class="delete-account-btn" data-idx="${idx}" data-platform="${acc.platform}" ${isDeleted ? 'disabled style="background: #6c757d;"' : ''}>
+                ${isDeleted ? 'Deleted ✓' : 'Delete'}
+            </button>
         `;
         container.appendChild(div);
     });

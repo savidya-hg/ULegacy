@@ -28,11 +28,19 @@ function initAutoFill() {
 }
 
 function attemptAutoFill(credentials) {
-    // Small delay to let SPAs render their login forms
-    setTimeout(() => {
-        const result = fillCredentials(credentials.username, credentials.password);
-        console.log('ULegacy Auto-Fill result:', result);
-    }, 1000);
+    // Wait for inputs to be present before attempting auto-fill
+    const check = () => {
+        const usernameEl = document.querySelector('input[name="username"], input[type="email"], input[type="text"]');
+        const passwordEl = document.querySelector('input[type="password"]');
+        if (usernameEl && passwordEl) {
+            const result = fillCredentials(credentials.username, credentials.password);
+            console.log('ULegacy Auto-Fill result:', result);
+        } else {
+            // Keep checking every 200ms
+            setTimeout(check, 200);
+        }
+    };
+    check();
 }
 
 // Listen for auto-fill requests from other content scripts or background

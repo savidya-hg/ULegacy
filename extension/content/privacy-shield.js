@@ -33,17 +33,6 @@ const SENSITIVE_SELECTORS = {
         'div[data-e2e="recommend-list-item-container"]',
         'div[data-e2e="chat-room"]',
         'div[class*="DivVideoFeedV2"]'
-    ],
-    // Twitter/X — timeline, DMs
-    'twitter.com': [
-        'div[data-testid="primaryColumn"] section',
-        'div[data-testid="DMDrawer"]',
-        'div[aria-label="Timeline: Your Home Timeline"]'
-    ],
-    'x.com': [
-        'div[data-testid="primaryColumn"] section',
-        'div[data-testid="DMDrawer"]',
-        'div[aria-label="Timeline: Your Home Timeline"]'
     ]
 };
 
