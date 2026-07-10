@@ -220,25 +220,29 @@ function processStep() {
             break;
 
         // CF1 Fix: Fill password from stored credentials instead of prompt()
+        // Wait up to 5 seconds for the password field to exist in case of modals/transitions
         case 'fill_password':
-            const passwordField = document.querySelector('input[type="password"]');
-            if (passwordField && storedCredentials) {
-                fillInput(passwordField, storedCredentials.password);
-                showTooltip('Password entered automatically.', () => {
+            showTooltip('Waiting for password input...', null);
+            waitForElement('input[type="password"]', (passwordField) => {
+                if (passwordField && storedCredentials) {
+                    fillInput(passwordField, storedCredentials.password);
+                    showTooltip('Password entered automatically.', () => {
+                        currentStep++;
+                        processStep();
+                    });
+                } else if (passwordField) {
+                    // Fallback: password field exists but no stored credentials
+                    showTooltip('Please enter the account password manually, then click Next.', () => {
+                        currentStep++;
+                        processStep();
+                    });
+                } else {
+                    // Timeout or not found — skip
+                    console.warn('ULegacy: Password field not found for filling');
                     currentStep++;
                     processStep();
-                });
-            } else if (passwordField) {
-                // Fallback: password field exists but no stored credentials
-                showTooltip('Please enter the account password manually, then click Next.', () => {
-                    currentStep++;
-                    processStep();
-                });
-            } else {
-                // No password field found — skip
-                currentStep++;
-                processStep();
-            }
+                }
+            }, 5000);
             break;
 
         // PG3 Fix: Check for CAPTCHA and pause if detected
@@ -304,18 +308,19 @@ function detectCaptcha() {
 function fillInput(el, value) {
     // Focus the element
     el.focus();
-    // Set the value
-    el.value = value;
+    // Use native setter for React/framework compatibility
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value'
+    )?.set;
+    if (nativeSetter) {
+        nativeSetter.call(el, value);
+    } else {
+        el.value = value;
+    }
     // Dispatch events to trigger framework validation (React, Angular, etc.)
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     el.dispatchEvent(new Event('blur', { bubbles: true }));
-    // For React specifically
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype, 'value'
-    ).set;
-    nativeInputValueSetter.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function waitForElement(selector, callback, timeout) {

@@ -97,8 +97,12 @@ function fillInput(el, value) {
     // Use native setter for React compatibility
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
         window.HTMLInputElement.prototype, 'value'
-    ).set;
-    nativeInputValueSetter.call(el, value);
+    )?.set;
+    if (nativeInputValueSetter) {
+        nativeInputValueSetter.call(el, value);
+    } else {
+        el.value = value;
+    }
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     el.dispatchEvent(new Event('blur', { bubbles: true }));
