@@ -78,7 +78,8 @@ async def register_user(req: UserRegisterRequest):
     if existing.data:
         raise HTTPException(400, "User already exists")
 
-    hash_value, salt = hash_recovery_key(req.recovery_key)
+    # The client sends SHA-256(raw_key) — we never see the raw key
+    hash_value, salt = hash_recovery_key(req.recovery_key_hash)
     user_data = {
         "email": req.email,
         "recovery_key_hash": hash_value,
@@ -207,6 +208,35 @@ async def simulate_inactivity(req: SimulateInactivityRequest):
     logger.info(f"Simulated inactivity for user {req.user_id}")
 
     return {"status": "simulated", "last_heartbeat": old_date}
+
+@app.post("/api/admin/simulate-settlement")
+async def simulate_settlement(req: SimulateInactivityRequest):
+    """Jump a user directly to 'deceased' (final settlement) status for testing.
+    
+    Skips the 30-day inactivity and 7-day grace period entirely.
+    Generates a settlement token so the beneficiary can verify and begin deletion.
+    """
+    user = supabase.table("users").select("id, email, beneficiary_email").eq("id", req.user_id).execute()
+    if not user.data:
+        raise HTTPException(404, "User not found")
+
+    token = generate_settlement_token()
+    supabase.table("users").update({
+        "status": "deceased",
+        "settlement_token": token,
+        "grace_period_start": None,
+        "confirmation_token": None
+    }).eq("id", req.user_id).execute()
+
+    supabase.table("audit_logs").insert({
+        "user_id": req.user_id,
+        "action": "simulate_settlement",
+        "metadata": {"token_generated": True, "simulated": True}
+    }).execute()
+
+    logger.info(f"Simulated final settlement for user {req.user_id}")
+
+    return {"status": "deceased", "settlement_token": token}
 
 @app.get("/")
 async def root():

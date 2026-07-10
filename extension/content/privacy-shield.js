@@ -1,24 +1,80 @@
 // privacy-shield.js - Content script that blurs sensitive content
+// PG1 Fix: ONLY activates when in settlement mode (new tab opened by extension)
+// CF2 Fix: If blurring fails, blocks the entire page as a fail-safe
 
-const SENSITIVE_SELECTORS = [
-    // Facebook
-    '[aria-label="Messages"]',
-    '[aria-label="Inbox"]',
-    '[role="feed"]',
-    '.x1n2onr6',
-    'div[aria-label*="message"]',
-    'div[role="tablist"]',
-    
-    // Instagram
-    'article[role="presentation"]',
-    '._a9zr',
-    'div[role="dialog"]',
-    
-    // Google
-    '.gb_ye',
-    '.gmail-nav',
-    'div[role="main"]'
+const SENSITIVE_SELECTORS = {
+    // Facebook — inbox, feed, stories, media
+    'facebook.com': [
+        '[aria-label="Messages"]',
+        '[aria-label="Inbox"]',
+        '[role="feed"]',
+        'div[aria-label*="message"]',
+        'div[role="tablist"]',
+        'div[aria-label="Stories"]',
+        'div[data-pagelet="Stories"]',
+        'div[data-pagelet="Feed"]',
+        'div[data-pagelet="RightRail"]'
+    ],
+    // Instagram — feed, DMs, stories, explore, reels
+    'instagram.com': [
+        'article[role="presentation"]',
+        'div[role="dialog"]',
+        'main > section',
+        'div[role="tablist"]'
+    ],
+    // Google — mail, drive content, personal data
+    'google.com': [
+        'div[role="main"]',
+        '.gmail-nav',
+        'div[role="navigation"]'
+    ],
+    // TikTok — feed, messages
+    'tiktok.com': [
+        'div[data-e2e="recommend-list-item-container"]',
+        'div[data-e2e="chat-room"]',
+        'div[class*="DivVideoFeedV2"]'
+    ],
+    // Twitter/X — timeline, DMs
+    'twitter.com': [
+        'div[data-testid="primaryColumn"] section',
+        'div[data-testid="DMDrawer"]',
+        'div[aria-label="Timeline: Your Home Timeline"]'
+    ],
+    'x.com': [
+        'div[data-testid="primaryColumn"] section',
+        'div[data-testid="DMDrawer"]',
+        'div[aria-label="Timeline: Your Home Timeline"]'
+    ]
+};
+
+// Text-based fallback selectors (more resilient to UI changes)
+const TEXT_BASED_SELECTORS = [
+    'a[href*="/messages"]',
+    'a[href*="/inbox"]',
+    'a[href*="/direct"]',
+    'a[href*="/stories"]',
+    'a[href*="/explore"]',
+    'a[href*="/reels"]'
 ];
+
+let isSettlementMode = false;
+let shieldApplied = false;
+
+// ---------- Check if we're in settlement mode ----------
+function checkSettlementMode() {
+    // Check session storage for settlement flag set by background.js
+    if (chrome.storage && chrome.storage.session) {
+        chrome.storage.session.get(['settlementMode'], (result) => {
+            if (result.settlementMode === true) {
+                isSettlementMode = true;
+                console.log('ULegacy: Settlement mode ACTIVE — applying privacy shield');
+                applyBlur();
+            } else {
+                console.log('ULegacy: Not in settlement mode — privacy shield inactive');
+            }
+        });
+    }
+}
 
 function applyBlur() {
     // Wait for document to be ready
@@ -27,14 +83,23 @@ function applyBlur() {
         return;
     }
 
-    // Only run on specific domains
+    // Determine which host we're on
     const host = window.location.hostname;
-    const relevantHosts = ['facebook.com', 'instagram.com', 'mail.google.com', 'google.com'];
-    if (!relevantHosts.some(h => host.includes(h))) {
-        console.log('ULegacy: Not running on', host);
+    let matchedHost = null;
+    for (const domain of Object.keys(SENSITIVE_SELECTORS)) {
+        if (host.includes(domain)) {
+            matchedHost = domain;
+            break;
+        }
+    }
+
+    if (!matchedHost) {
+        console.log('ULegacy: No selector definitions for', host);
+        applyFullPageBlock('Unrecognized platform — page blocked for privacy protection.');
         return;
     }
 
+    // Inject blur styles
     const style = document.createElement('style');
     style.id = 'ulegacy-shield-styles';
     style.textContent = `
@@ -102,45 +167,103 @@ function applyBlur() {
         .ulegacy-guide-tooltip .step-next:hover {
             background: #3a00b0;
         }
+        #ulegacy-page-block {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: rgba(26, 26, 46, 0.95) !important;
+            z-index: 999999 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            flex-direction: column !important;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+        }
     `;
     document.head.appendChild(style);
 
-    // Apply blur to sensitive elements
-    SENSITIVE_SELECTORS.forEach(selector => {
+    // Apply blur to sensitive elements for this platform
+    const selectors = SENSITIVE_SELECTORS[matchedHost] || [];
+    const allSelectors = [...selectors, ...TEXT_BASED_SELECTORS];
+
+    let blurredCount = 0;
+    allSelectors.forEach(selector => {
         try {
             document.querySelectorAll(selector).forEach(el => {
                 el.classList.add('ulegacy-blur');
+                blurredCount++;
             });
         } catch (e) {
             // Ignore invalid selectors
         }
     });
 
-    // Observer for dynamic content
+    shieldApplied = blurredCount > 0;
+
+    // Observer for dynamic content (SPAs load content asynchronously)
     if (document.body) {
         const observer = new MutationObserver(mutations => {
+            let newBlurs = 0;
             mutations.forEach(mutation => {
                 mutation.addedNodes.forEach(node => {
                     if (node.nodeType === Node.ELEMENT_NODE) {
-                        SENSITIVE_SELECTORS.forEach(selector => {
+                        allSelectors.forEach(selector => {
                             try {
                                 if (node.matches && node.matches(selector)) {
                                     node.classList.add('ulegacy-blur');
+                                    newBlurs++;
                                 }
                                 node.querySelectorAll(selector).forEach(el => {
                                     el.classList.add('ulegacy-blur');
+                                    newBlurs++;
                                 });
                             } catch (e) {}
                         });
                     }
                 });
             });
+            if (newBlurs > 0) shieldApplied = true;
         });
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    console.log('ULegacy Privacy Shield active on', host);
+    // CF2 Fix: Fail-safe — if no elements were blurred after 2 seconds,
+    // block the entire page to prevent privacy leaks.
+    setTimeout(() => {
+        if (!shieldApplied) {
+            console.warn('ULegacy: Privacy shield could not blur any elements — activating full page block');
+            applyFullPageBlock('ULegacy could not verify privacy protection on this page. The page has been blocked for your safety.');
+        }
+    }, 2000);
+
+    console.log(`ULegacy Privacy Shield active on ${host} — ${blurredCount} elements blurred`);
 }
 
-// Run
-applyBlur();
+// CF2 Fix: Full page block overlay when blur fails
+function applyFullPageBlock(message) {
+    if (document.getElementById('ulegacy-page-block')) return;
+
+    // Wait for body
+    if (!document.body) {
+        setTimeout(() => applyFullPageBlock(message), 100);
+        return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'ulegacy-page-block';
+    overlay.innerHTML = `
+        <div style="text-align: center; color: white; max-width: 400px; padding: 20px;">
+            <div style="font-size: 48px; margin-bottom: 16px;">🛡️</div>
+            <h2 style="font-size: 20px; font-weight: 700; margin: 0 0 12px;">Privacy Protection Active</h2>
+            <p style="font-size: 14px; opacity: 0.8; line-height: 1.6;">${message}</p>
+            <p style="font-size: 12px; opacity: 0.6; margin-top: 16px;">Please navigate to the account settings or deletion page to continue.</p>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+}
+
+// ---------- Init ----------
+// Only run when settlement mode is active
+checkSettlementMode();

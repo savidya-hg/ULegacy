@@ -1,6 +1,41 @@
-// auto-fill.js - Auto-fills credentials when needed
+// auto-fill.js - Auto-fills credentials during settlement
+// CF1 Fix: Now properly wired up to read from chrome.storage.session
+// and fill login forms when in settlement mode.
 
-// Listen for auto-fill requests
+let isSettlementMode = false;
+
+// ---------- Init: Check if we're in settlement mode ----------
+function initAutoFill() {
+    if (chrome.storage && chrome.storage.session) {
+        chrome.storage.session.get(['settlementMode', 'settlementCredentials'], (result) => {
+            if (result.settlementMode && result.settlementCredentials) {
+                isSettlementMode = true;
+                console.log('ULegacy Auto-Fill: Settlement mode active');
+
+                // Wait for the page to be ready, then try to auto-fill
+                if (document.readyState === 'complete') {
+                    attemptAutoFill(result.settlementCredentials);
+                } else {
+                    window.addEventListener('load', () => {
+                        attemptAutoFill(result.settlementCredentials);
+                    });
+                }
+            } else {
+                console.log('ULegacy Auto-Fill: Not in settlement mode');
+            }
+        });
+    }
+}
+
+function attemptAutoFill(credentials) {
+    // Small delay to let SPAs render their login forms
+    setTimeout(() => {
+        const result = fillCredentials(credentials.username, credentials.password);
+        console.log('ULegacy Auto-Fill result:', result);
+    }, 1000);
+}
+
+// Listen for auto-fill requests from other content scripts or background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'auto_fill') {
         const { username, password } = message.data;
@@ -10,15 +45,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 function fillCredentials(username, password) {
-    // Try common selectors
+    // Try common selectors for username/email
     const usernameSelectors = [
         'input[type="email"]',
-        'input[type="text"]',
-        'input[name="email"]',
+        'input[type="text"][name="email"]',
         'input[name="username"]',
-        'input[placeholder*="email"]',
-        'input[placeholder*="username"]',
-        'input[autocomplete="username"]'
+        'input[name="email"]',
+        'input[placeholder*="email" i]',
+        'input[placeholder*="username" i]',
+        'input[autocomplete="username"]',
+        'input[type="text"]'
     ];
 
     const passwordSelectors = [
@@ -34,9 +70,7 @@ function fillCredentials(username, password) {
     for (const selector of usernameSelectors) {
         const el = document.querySelector(selector);
         if (el && !el.value) {
-            el.value = username;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
+            fillInput(el, username);
             usernameFilled = true;
             highlightElement(el);
             break;
@@ -47,9 +81,7 @@ function fillCredentials(username, password) {
     for (const selector of passwordSelectors) {
         const el = document.querySelector(selector);
         if (el && !el.value) {
-            el.value = password;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
+            fillInput(el, password);
             passwordFilled = true;
             highlightElement(el);
             break;
@@ -57,6 +89,19 @@ function fillCredentials(username, password) {
     }
 
     return { usernameFilled, passwordFilled };
+}
+
+// Fill an input with proper event dispatching (React/Angular compatible)
+function fillInput(el, value) {
+    el.focus();
+    // Use native setter for React compatibility
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value'
+    ).set;
+    nativeInputValueSetter.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new Event('blur', { bubbles: true }));
 }
 
 function highlightElement(el) {
@@ -69,4 +114,6 @@ function highlightElement(el) {
     }, 2000);
 }
 
+// ---------- Init ----------
 console.log('ULegacy Auto-Fill loaded');
+initAutoFill();

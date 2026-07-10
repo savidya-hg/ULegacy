@@ -33,7 +33,7 @@
 
         <!-- Status Bar -->
         <div class="status-bar">
-            <span id="statusBadge" class="badge badge-active">Active</span>
+            <span id="statusBadge" class="badge badge-active">● Active</span>
             <span id="lastCheck" class="last-check">Last check: never</span>
         </div>
 
@@ -113,7 +113,10 @@
             </div>
 
             <div class="section">
-                <button id="testTriggerBtn" class="btn btn-danger btn-full">Test Trigger (30-day simulation)</button>
+                <div style="display:flex; gap:6px;">
+                    <button id="testTriggerBtn" class="btn btn-danger" style="flex:1; font-size:11px; padding:6px 8px;">Test: Grace Period</button>
+                    <button id="testSettlementBtn" class="btn btn-danger" style="flex:1; font-size:11px; padding:6px 8px;">Test: Final Settlement</button>
+                </div>
             </div>
         </div>
 

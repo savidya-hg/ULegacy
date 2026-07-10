@@ -1,7 +1,9 @@
 // background.js - Service Worker (ES Module)
+// Handles heartbeat scheduling, settlement tab management, and message routing.
 
 const API_BASE = 'http://localhost:8000';
 
+// ---------- API Helper ----------
 async function callApi(endpoint, method = 'GET', body = null) {
     const options = {
         method,
@@ -20,6 +22,16 @@ async function sendHeartbeat(userId) {
     return callApi('/api/heartbeat', 'POST', { user_id: userId });
 }
 
+// ---------- Platform Login URLs ----------
+const PLATFORM_LOGIN_URLS = {
+    facebook: 'https://www.facebook.com/login',
+    google: 'https://accounts.google.com/signin',
+    instagram: 'https://www.instagram.com/accounts/login/',
+    tiktok: 'https://www.tiktok.com/login',
+    twitter: 'https://twitter.com/i/flow/login'
+};
+
+// ---------- State ----------
 let userId = null;
 let userStatus = 'active';
 let lastHeartbeat = null;
@@ -31,7 +43,7 @@ chrome.storage.local.get(['userId', 'userStatus', 'lastHeartbeat'], (result) => 
     lastHeartbeat = result.lastHeartbeat || null;
 });
 
-// Set up daily heartbeat
+// ---------- Daily Heartbeat Alarm ----------
 chrome.alarms.create('heartbeat', { periodInMinutes: 1440 }); // 24 hours
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -55,8 +67,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
 });
 
-// Listen for messages from popup
+// ---------- Message Handlers ----------
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
+    // --- Get Status ---
     if (message.type === 'get_status') {
         chrome.storage.local.get(['userStatus', 'lastHeartbeat'], (result) => {
             sendResponse({
@@ -67,6 +81,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
+    // --- Reset Timer (I'm Alive) ---
     if (message.type === 'reset_timer' && userId) {
         sendHeartbeat(userId).then((result) => {
             const now = new Date().toISOString();
@@ -81,8 +96,63 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
+    // --- Open Settlement Tab (NEW — CF1 fix) ---
+    // Called by the popup when the beneficiary clicks "Delete" on an account.
+    // Opens a new tab to the platform's login page and stores credentials
+    // in chrome.storage.session so content scripts can auto-fill them.
+    if (message.type === 'open_settlement_tab') {
+        const { platform, username, password } = message.data;
+        const loginUrl = PLATFORM_LOGIN_URLS[platform];
+
+        if (!loginUrl) {
+            sendResponse({ status: 'error', message: `Unknown platform: ${platform}` });
+            return true;
+        }
+
+        // Store credentials and settlement mode flag in session storage
+        // (session storage is cleared when the browser closes — never persisted to disk)
+        chrome.storage.session.set({
+            settlementMode: true,
+            settlementPlatform: platform,
+            settlementCredentials: { username, password }
+        }, () => {
+            // Open a new tab to the platform login page
+            chrome.tabs.create({ url: loginUrl }, (tab) => {
+                console.log(`Settlement tab opened for ${platform}: tab ${tab.id}`);
+                sendResponse({ status: 'ok', tabId: tab.id });
+            });
+        });
+        return true;
+    }
+
+    // --- Settlement Account Deleted (from content script) ---
+    // When the guided deletion completes, the content script notifies us.
+    // We relay this back to any open popup.
+    if (message.type === 'settlement_account_deleted') {
+        const { platform } = message.data || {};
+        console.log(`Account deleted: ${platform}`);
+
+        // Clear settlement session data
+        chrome.storage.session.set({
+            settlementMode: false,
+            settlementPlatform: null,
+            settlementCredentials: null
+        });
+
+        // Broadcast to popup (it will update the dashboard)
+        chrome.runtime.sendMessage({
+            type: 'account_deletion_complete',
+            platform: platform
+        }).catch(() => {
+            // Popup might not be open — that's fine
+        });
+
+        sendResponse({ status: 'ok' });
+        return true;
+    }
+
+    // --- Start Guide (from popup, for active tab content script) ---
     if (message.type === 'start_guide') {
-        // Send to active tab to start guided deletion
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs[0]) {
                 chrome.tabs.sendMessage(tabs[0].id, {
@@ -94,18 +164,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ status: 'started' });
         return true;
     }
-
-    if (message.type === 'delete_account') {
-        // Handle account deletion request
-        const { platform, user_id, recovery_key } = message.data;
-        // In production, this would open the platform and start the guided process
-        console.log(`Deleting ${platform} for user ${user_id}`);
-        sendResponse({ status: 'processing' });
-        return true;
-    }
 });
 
-// When extension is installed
+// ---------- Extension Installed ----------
 chrome.runtime.onInstalled.addListener(() => {
     console.log('ULegacy installed');
 });

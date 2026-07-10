@@ -7,7 +7,7 @@ class UserBase(BaseModel):
     beneficiary_email: Optional[EmailStr] = None
 
 class UserCreate(UserBase):
-    recovery_key: str
+    recovery_key_hash: str
 
 class UserResponse(BaseModel):
     id: str
@@ -27,14 +27,14 @@ class VaultSaveRequest(BaseModel):
 
 class VerifyRequest(BaseModel):
     user_id: str
-    recovery_key: str
+    recovery_key_hash: str
 
 class SettlementTriggerRequest(BaseModel):
     user_id: str
 
 class UserRegisterRequest(BaseModel):
     email: EmailStr
-    recovery_key: str
+    recovery_key_hash: str
     beneficiary_email: Optional[EmailStr] = None
 
 class SimulateInactivityRequest(BaseModel):

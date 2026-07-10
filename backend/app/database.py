@@ -30,17 +30,26 @@ supabase: Client = create_client(_supabase_url, _supabase_key)
 ph = argon2.PasswordHasher()
 
 # ---------- Helper Functions ----------
-def hash_recovery_key(key: str, salt: str = None) -> tuple:
-    """Hash recovery key with Argon2id"""
+def hash_recovery_key(client_hash: str, salt: str = None) -> tuple:
+    """Hash the client-provided SHA-256 hash with Argon2id.
+    
+    The client sends a SHA-256 hash of the raw recovery key.
+    We never receive the raw key — only its SHA-256 digest.
+    We then store Argon2id(SHA-256(raw_key) + salt) in the database.
+    """
     if not salt:
         salt = secrets.token_hex(16)
-    hash_value = ph.hash(f"{key}{salt}")
+    hash_value = ph.hash(f"{client_hash}{salt}")
     return hash_value, salt
 
-def verify_recovery_key(key: str, hash_value: str, salt: str) -> bool:
-    """Verify recovery key against stored hash"""
+def verify_recovery_key(client_hash: str, stored_hash: str, salt: str) -> bool:
+    """Verify client-provided SHA-256 hash against stored Argon2id hash.
+    
+    The client sends SHA-256(raw_key). We verify it against
+    the stored Argon2id(SHA-256(raw_key) + salt).
+    """
     try:
-        ph.verify(hash_value, f"{key}{salt}")
+        ph.verify(stored_hash, f"{client_hash}{salt}")
         return True
     except Exception:
         return False
@@ -48,3 +57,7 @@ def verify_recovery_key(key: str, hash_value: str, salt: str) -> bool:
 def generate_settlement_token() -> str:
     """Generate a secure one-time settlement token"""
     return secrets.token_urlsafe(32)
+
+def generate_confirmation_token() -> str:
+    """Generate a token for beneficiary grace-period confirmation links"""
+    return secrets.token_urlsafe(24)

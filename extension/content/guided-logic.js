@@ -1,44 +1,69 @@
 // guided-logic.js - Guides beneficiary through account deletion
+// CF1 Fix: Reads credentials from chrome.storage.session instead of prompt()
+// PG3 Fix: Detects CAPTCHAs and pauses for manual completion
 
 let currentStep = 0;
 let guideSteps = [];
 let isActive = false;
+let storedCredentials = null;
 
 // Platform-specific step definitions
 const PLATFORM_STEPS = {
     facebook: [
         { type: 'navigate', url: '/settings', instruction: 'Opening Settings...' },
-        { type: 'wait', selector: '[role="main"]', instruction: 'Wait for settings to load...' },
-        { type: 'click', selector: 'a[href*="privacy"]', instruction: 'Click Privacy Settings' },
-        { type: 'click', selector: 'a[href*="deactivation"]', instruction: 'Click Deactivation and Deletion' },
-        { type: 'click', selector: 'div:contains("Delete Account")', instruction: 'Select Delete Account' },
-        { type: 'fill', selector: 'input[type="password"]', instruction: 'Entering password...' },
-        { type: 'click', selector: 'button:contains("Delete Account")', instruction: 'Click final Delete button' }
+        { type: 'wait', selector: '[role="main"]', instruction: 'Waiting for settings to load...' },
+        { type: 'click', selector: 'a[href*="privacy"]', text: 'Privacy', instruction: 'Click Privacy Settings' },
+        { type: 'click', selector: 'a[href*="deactivation"]', text: 'Deactivation', instruction: 'Click Deactivation and Deletion' },
+        { type: 'click', text: 'Delete Account', instruction: 'Select Delete Account' },
+        { type: 'fill_password', instruction: 'Entering password...' },
+        { type: 'captcha_check', instruction: 'Checking for security verification...' },
+        { type: 'click', text: 'Delete Account', instruction: 'Click final Delete button to confirm' }
     ],
     google: [
         { type: 'navigate', url: '/account', instruction: 'Opening Google Account...' },
-        { type: 'click', selector: 'a[href*="delete-account"]', instruction: 'Click Delete Account' },
+        { type: 'click', selector: 'a[href*="delete-account"]', text: 'Delete', instruction: 'Click Delete Account' },
         { type: 'wait', selector: 'input[type="password"]', instruction: 'Verify your identity...' },
-        { type: 'fill', selector: 'input[type="password"]', instruction: 'Entering password...' },
-        { type: 'click', selector: 'button:contains("Delete")', instruction: 'Confirm deletion' }
+        { type: 'fill_password', instruction: 'Entering password...' },
+        { type: 'captcha_check', instruction: 'Checking for security verification...' },
+        { type: 'click', text: 'Delete', instruction: 'Confirm deletion' }
     ],
     instagram: [
         { type: 'navigate', url: '/accounts/remove/request/permanent/', instruction: 'Opening Instagram deletion page...' },
-        { type: 'wait', selector: 'select', instruction: 'Select reason for deletion...' },
-        { type: 'fill', selector: 'input[type="password"]', instruction: 'Entering password...' },
-        { type: 'click', selector: 'button:contains("Delete")', instruction: 'Click Delete' }
+        { type: 'wait', selector: 'select, input[type="password"]', instruction: 'Waiting for deletion form...' },
+        { type: 'fill_password', instruction: 'Entering password...' },
+        { type: 'captcha_check', instruction: 'Checking for security verification...' },
+        { type: 'click', text: 'Delete', instruction: 'Click Delete' }
     ],
     tiktok: [
         { type: 'navigate', url: '/settings/account/delete', instruction: 'Opening TikTok deletion page...' },
-        { type: 'wait', selector: 'button:contains("Delete")', instruction: 'Click Delete Account' }
+        { type: 'wait', selector: 'button', instruction: 'Waiting for page to load...' },
+        { type: 'captcha_check', instruction: 'Checking for security verification...' },
+        { type: 'click', text: 'Delete', instruction: 'Click Delete Account' }
     ],
     twitter: [
         { type: 'navigate', url: '/settings/deactivate', instruction: 'Opening Twitter deactivation page...' },
-        { type: 'wait', selector: 'input[type="password"]', instruction: 'Verifying...' },
-        { type: 'fill', selector: 'input[type="password"]', instruction: 'Entering password...' },
-        { type: 'click', selector: 'button:contains("Deactivate")', instruction: 'Confirm deactivation' }
+        { type: 'wait', selector: 'input[type="password"]', instruction: 'Waiting for verification...' },
+        { type: 'fill_password', instruction: 'Entering password...' },
+        { type: 'captcha_check', instruction: 'Checking for security verification...' },
+        { type: 'click', text: 'Deactivate', instruction: 'Confirm deactivation' }
     ]
 };
+
+// ---------- CAPTCHA Detection Selectors ----------
+const CAPTCHA_SELECTORS = [
+    'iframe[src*="captcha"]',
+    'iframe[src*="recaptcha"]',
+    'iframe[src*="hcaptcha"]',
+    'div[class*="captcha"]',
+    'div[class*="Captcha"]',
+    'div[id*="captcha"]',
+    '#captcha',
+    '.g-recaptcha',
+    '.h-captcha',
+    'div[data-sitekey]',
+    'iframe[title*="reCAPTCHA"]',
+    'iframe[title*="challenge"]'
+];
 
 // Listen for start message from background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -47,6 +72,96 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ status: 'started' });
     }
 });
+
+// ---------- Init: Auto-start guide if in settlement mode ----------
+function initGuide() {
+    if (chrome.storage && chrome.storage.session) {
+        chrome.storage.session.get(['settlementMode', 'settlementPlatform', 'settlementCredentials'], (result) => {
+            if (result.settlementMode && result.settlementPlatform && result.settlementCredentials) {
+                storedCredentials = result.settlementCredentials;
+                // Small delay to let the page load
+                setTimeout(() => {
+                    // Check if we're on the login page — if so, auto-fill first
+                    if (isLoginPage()) {
+                        autoFillLogin();
+                    } else {
+                        startGuide(result.settlementPlatform);
+                    }
+                }, 1500);
+            }
+        });
+    }
+}
+
+function isLoginPage() {
+    const url = window.location.href.toLowerCase();
+    return url.includes('/login') || url.includes('/signin') || url.includes('/accounts/login');
+}
+
+// CF1 Fix: Auto-fill login credentials from session storage
+function autoFillLogin() {
+    if (!storedCredentials) return;
+
+    showTooltip('Logging in automatically...', null);
+
+    // Try to fill username/email
+    const usernameSelectors = [
+        'input[type="email"]',
+        'input[type="text"][name="email"]',
+        'input[name="username"]',
+        'input[name="email"]',
+        'input[autocomplete="username"]',
+        'input[type="text"]'
+    ];
+
+    const passwordSelectors = [
+        'input[type="password"]',
+        'input[name="password"]',
+        'input[autocomplete="current-password"]'
+    ];
+
+    let usernameFilled = false;
+    let passwordFilled = false;
+
+    for (const selector of usernameSelectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+            fillInput(el, storedCredentials.username);
+            usernameFilled = true;
+            break;
+        }
+    }
+
+    for (const selector of passwordSelectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+            fillInput(el, storedCredentials.password);
+            passwordFilled = true;
+            break;
+        }
+    }
+
+    if (usernameFilled && passwordFilled) {
+        showTooltip('Credentials entered. Click the login button or press Enter.', null);
+        // Try to find and click the submit button
+        setTimeout(() => {
+            const submitBtn = document.querySelector(
+                'button[type="submit"], input[type="submit"], button[name="login"]'
+            ) || findByText('Log In') || findByText('Sign In') || findByText('Login') || findByText('Next');
+
+            if (submitBtn) {
+                submitBtn.click();
+            }
+        }, 500);
+    } else if (usernameFilled) {
+        // Some platforms (Google) have a two-step login — fill username first
+        showTooltip('Email entered. Please proceed to the next step.', null);
+        setTimeout(() => {
+            const nextBtn = findByText('Next') || document.querySelector('button[type="submit"]');
+            if (nextBtn) nextBtn.click();
+        }, 500);
+    }
+}
 
 function startGuide(platform) {
     if (isActive) {
@@ -57,7 +172,7 @@ function startGuide(platform) {
     const steps = PLATFORM_STEPS[platform];
     if (!steps) {
         console.error('No steps defined for platform:', platform);
-        showTooltip('Platform not supported yet. Manual deletion required.', 'error');
+        showTooltip('Platform not supported yet. Manual deletion required.', null);
         return;
     }
 
@@ -82,10 +197,10 @@ function processStep() {
         case 'navigate':
             const url = new URL(window.location.href);
             const newUrl = url.origin + step.url;
-            if (window.location.pathname !== step.url) {
+            if (!window.location.pathname.startsWith(step.url)) {
+                showTooltip(step.instruction, null);
                 window.location.href = newUrl;
-                // Wait for navigation then continue
-                setTimeout(() => processStep(), 1500);
+                // Page will reload — guide resumes via initGuide()
             } else {
                 currentStep++;
                 processStep();
@@ -93,58 +208,48 @@ function processStep() {
             break;
 
         case 'wait':
-            waitForElement(step.selector, () => {
+            showTooltip(step.instruction, null);
+            waitForElement(step.selector, (el) => {
                 currentStep++;
                 processStep();
-            }, 5000);
+            }, 10000);
             break;
 
         case 'click':
-            const el = document.querySelector(step.selector);
-            if (el) {
-                highlightElement(el);
-                showTooltip(step.instruction, () => {
-                    el.click();
+            handleClickStep(step);
+            break;
+
+        // CF1 Fix: Fill password from stored credentials instead of prompt()
+        case 'fill_password':
+            const passwordField = document.querySelector('input[type="password"]');
+            if (passwordField && storedCredentials) {
+                fillInput(passwordField, storedCredentials.password);
+                showTooltip('Password entered automatically.', () => {
+                    currentStep++;
+                    processStep();
+                });
+            } else if (passwordField) {
+                // Fallback: password field exists but no stored credentials
+                showTooltip('Please enter the account password manually, then click Next.', () => {
                     currentStep++;
                     processStep();
                 });
             } else {
-                console.warn('Element not found:', step.selector);
-                // Try to find by text
-                const fallback = findByText(step.selector);
-                if (fallback) {
-                    highlightElement(fallback);
-                    showTooltip(step.instruction, () => {
-                        fallback.click();
-                        currentStep++;
-                        processStep();
-                    });
-                } else {
-                    showTooltip('Cannot find element. Please click it manually.', null);
-                    // Manual override: user clicks next
-                    currentStep++;
-                    processStep();
-                }
+                // No password field found — skip
+                currentStep++;
+                processStep();
             }
             break;
 
-        case 'fill':
-            const input = document.querySelector(step.selector);
-            if (input) {
-                // In production, get password from vault
-                const password = prompt('Enter the account password (this is not stored):');
-                if (password) {
-                    input.value = password;
-                    // Trigger change event
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                    showTooltip('Password entered', () => {
-                        currentStep++;
-                        processStep();
-                    });
-                } else {
-                    showTooltip('Password required to continue', null);
-                }
+        // PG3 Fix: Check for CAPTCHA and pause if detected
+        case 'captcha_check':
+            if (detectCaptcha()) {
+                showTooltip('⚠️ Security check detected. Please complete the CAPTCHA, then click Next to continue.', () => {
+                    currentStep++;
+                    processStep();
+                });
             } else {
+                // No captcha — continue immediately
                 currentStep++;
                 processStep();
             }
@@ -154,6 +259,63 @@ function processStep() {
             currentStep++;
             processStep();
     }
+}
+
+function handleClickStep(step) {
+    // Try CSS selector first
+    let el = step.selector ? document.querySelector(step.selector) : null;
+
+    // Fallback: try finding by text content
+    if (!el && step.text) {
+        el = findByText(step.text);
+    }
+
+    if (el) {
+        highlightElement(el);
+        showTooltip(step.instruction, () => {
+            el.click();
+            currentStep++;
+            // Wait a moment for page to update after click
+            setTimeout(() => processStep(), 1000);
+        });
+    } else {
+        // Element not found — ask user to do it manually
+        showTooltip(`Cannot find the element. Please click "${step.text || 'the button'}" manually, then click Next.`, () => {
+            currentStep++;
+            setTimeout(() => processStep(), 1000);
+        });
+    }
+}
+
+// PG3 Fix: Detect CAPTCHA elements on the page
+function detectCaptcha() {
+    for (const selector of CAPTCHA_SELECTORS) {
+        try {
+            if (document.querySelector(selector)) {
+                console.log('ULegacy: CAPTCHA detected via', selector);
+                return true;
+            }
+        } catch (e) {}
+    }
+    return false;
+}
+
+// Fill an input field and dispatch proper events
+function fillInput(el, value) {
+    // Focus the element
+    el.focus();
+    // Set the value
+    el.value = value;
+    // Dispatch events to trigger framework validation (React, Angular, etc.)
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    el.dispatchEvent(new Event('blur', { bubbles: true }));
+    // For React specifically
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value'
+    ).set;
+    nativeInputValueSetter.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function waitForElement(selector, callback, timeout) {
@@ -175,10 +337,14 @@ function waitForElement(selector, callback, timeout) {
 }
 
 function findByText(text) {
-    const elements = document.querySelectorAll('button, a, div, span');
+    if (!text) return null;
+    const elements = document.querySelectorAll('button, a, div[role="button"], span, label');
     for (const el of elements) {
         if (el.textContent && el.textContent.trim().toLowerCase().includes(text.toLowerCase())) {
-            return el;
+            // Prefer smaller/more specific elements
+            if (el.offsetParent !== null) { // Check if visible
+                return el;
+            }
         }
     }
     return null;
@@ -215,16 +381,27 @@ function showTooltip(instruction, onNext) {
 
 function completeGuide() {
     isActive = false;
-    showTooltip('Account deletion completed!', null);
-    setTimeout(() => {
-        const tooltip = document.querySelector('.ulegacy-guide-tooltip');
-        if (tooltip) tooltip.remove();
-        // Notify completion
+
+    // Get the platform from session storage
+    chrome.storage.session.get(['settlementPlatform'], (result) => {
+        const platform = result.settlementPlatform || 'unknown';
+
+        showTooltip('✅ Account deletion completed! You can close this tab.', null);
+
+        // Notify background.js that deletion is complete
         chrome.runtime.sendMessage({
-            type: 'guide_complete',
-            platform: 'facebook' // or whatever platform
+            type: 'settlement_account_deleted',
+            data: { platform: platform }
         });
-    }, 3000);
+
+        // Auto-remove tooltip after 5 seconds
+        setTimeout(() => {
+            const tooltip = document.querySelector('.ulegacy-guide-tooltip');
+            if (tooltip) tooltip.remove();
+        }, 5000);
+    });
 }
 
+// ---------- Init ----------
 console.log('ULegacy Guided Logic loaded');
+initGuide();

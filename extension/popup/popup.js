@@ -1,4 +1,5 @@
 // popup.js - ES Module
+// Main popup controller for both Owner and Beneficiary dashboards.
 
 // ---------- API Functions ----------
 const API_BASE = 'http://localhost:8000';
@@ -33,19 +34,23 @@ async function getVault(userId) {
     return callApi(`/api/vault/${userId}`);
 }
 
-async function verifyRecovery(userId, recoveryKey) {
+async function verifyRecovery(userId, recoveryKeyHash) {
     return callApi('/api/settlement/verify', 'POST', {
         user_id: userId,
-        recovery_key: recoveryKey
+        recovery_key_hash: recoveryKeyHash
     });
 }
 
-async function registerUser(email, recoveryKey, beneficiaryEmail) {
+async function registerUser(email, recoveryKeyHash, beneficiaryEmail) {
     return callApi('/api/users/register', 'POST', {
         email,
-        recovery_key: recoveryKey,
+        recovery_key_hash: recoveryKeyHash,
         beneficiary_email: beneficiaryEmail
     });
+}
+
+async function completeSettlementApi(userId) {
+    return callApi('/api/settlement/complete', 'POST', { user_id: userId });
 }
 
 // ---------- Encryption Functions ----------
@@ -99,6 +104,17 @@ async function decryptData(encryptedObj, recoveryKey) {
     return JSON.parse(new TextDecoder().decode(decrypted));
 }
 
+// ---------- CF4 Fix: Client-Side Key Hashing ----------
+// SHA-256 hash the recovery key before sending to the server.
+// The raw key NEVER leaves the browser — only this hash is transmitted.
+async function hashKeyForServer(recoveryKey) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(recoveryKey);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // ---------- State ----------
 let currentRole = 'owner';
 let userId = null;
@@ -107,6 +123,7 @@ let vault = { accounts: [] };
 let userStatus = 'active';
 let lastHeartbeat = null;
 let isRegistered = false;
+let settlementUserId = null; // For beneficiary: the owner's user ID
 
 // DOM refs
 const roleSelect = document.getElementById('roleSelect');
@@ -150,6 +167,22 @@ chrome.storage.local.get([
     await checkConnection();
 });
 
+// ---------- Listen for account deletion completions from background ----------
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'account_deletion_complete') {
+        const platform = message.platform;
+        // Update the UI to show this account as deleted
+        const buttons = document.querySelectorAll(`.delete-account-btn[data-platform="${platform}"]`);
+        buttons.forEach(btn => {
+            btn.textContent = 'Deleted ✓';
+            btn.disabled = true;
+            btn.style.background = '#6c757d';
+        });
+        showStatus(`${platform} account deleted successfully!`, 'success');
+        checkAllAccountsDeleted();
+    }
+});
+
 // ---------- Check Connection ----------
 async function checkConnection() {
     try {
@@ -179,16 +212,19 @@ roleSelect.addEventListener('change', () => {
 // ---------- Status UI ----------
 function updateStatusUI() {
     let badgeClass = 'badge-active';
-    let label = 'Active';
+    let label = '● Active';
     if (userStatus === 'inactive') {
         badgeClass = 'badge-inactive';
-        label = 'Inactive';
+        label = '● Inactive';
     } else if (userStatus === 'grace_period') {
         badgeClass = 'badge-grace';
-        label = 'Grace Period';
-    } else if (userStatus === 'deceased' || userStatus === 'settled') {
+        label = '⚠ Grace Period';
+    } else if (userStatus === 'deceased' || userStatus === 'settling') {
         badgeClass = 'badge-settled';
-        label = userStatus === 'settled' ? 'Settled' : 'Deceased';
+        label = '◉ Settlement';
+    } else if (userStatus === 'settled') {
+        badgeClass = 'badge-settled';
+        label = '✓ Settled';
     }
     statusBadge.className = `badge ${badgeClass}`;
     statusBadge.textContent = label;
@@ -377,6 +413,33 @@ document.getElementById('testTriggerBtn').addEventListener('click', async () => 
     }
 });
 
+// Test Trigger: Final Settlement (skip grace period entirely)
+document.getElementById('testSettlementBtn').addEventListener('click', async () => {
+    if (!userId || !isRegistered) {
+        await registerUserWithBackend();
+        if (!userId) return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/admin/simulate-settlement`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+        if (response.ok) {
+            const result = await response.json();
+            userStatus = 'deceased';
+            await chrome.storage.local.set({ userStatus });
+            updateStatusUI();
+            showStatus('Final settlement triggered! Switch to Beneficiary mode to test.', 'success');
+        } else {
+            showStatus('Test failed: ' + await response.text(), 'error');
+        }
+    } catch (e) {
+        showStatus('Test failed: ' + e.message, 'error');
+    }
+});
+
 // ---------- Register User ----------
 async function registerUserWithBackend() {
     const email = prompt('Enter your email to register:');
@@ -388,8 +451,10 @@ async function registerUserWithBackend() {
     }
 
     try {
+        // CF4 Fix: Hash the recovery key client-side before sending
+        const keyHash = await hashKeyForServer(recoveryKey);
         const beneficiaryEmail = vault.beneficiaryEmail || null;
-        const result = await registerUser(email, recoveryKey, beneficiaryEmail);
+        const result = await registerUser(email, keyHash, beneficiaryEmail);
         userId = result.id;
         isRegistered = true;
         await chrome.storage.local.set({ userId, isRegistered });
@@ -436,66 +501,20 @@ document.getElementById('beneficiaryVerifyBtn').addEventListener('click', async 
     }
 
     try {
-        const result = await verifyRecovery(userIdInput, key);
+        // CF4 Fix: Hash the recovery key before sending for verification
+        const keyHash = await hashKeyForServer(key);
+        const result = await verifyRecovery(userIdInput, keyHash);
+
         if (result.settlement_token) {
+            settlementUserId = userIdInput;
             const vaultData = await getVault(userIdInput);
+
             if (vaultData.encrypted_data) {
+                // Decrypt using the raw key (never sent to server)
                 const encObj = JSON.parse(vaultData.encrypted_data);
                 const decrypted = await decryptData(encObj, key);
 
-                const container = document.getElementById('settlementAccounts');
-                container.innerHTML = `
-                    <h4 style="font-size:13px;margin-bottom:8px;">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-right:4px; color: #dc3545;">
-                            <line x1="8" y1="6" x2="21" y2="6"/>
-                            <line x1="8" y1="12" x2="21" y2="12"/>
-                            <line x1="8" y1="18" x2="21" y2="18"/>
-                            <line x1="3" y1="6" x2="3.01" y2="6"/>
-                            <line x1="3" y1="12" x2="3.01" y2="12"/>
-                            <line x1="3" y1="18" x2="3.01" y2="18"/>
-                        </svg>
-                        <span style="vertical-align:middle;">Accounts to Delete</span>
-                    </h4>
-                `;
-
-                if (!decrypted.accounts || decrypted.accounts.length === 0) {
-                    container.innerHTML += '<p style="color:#6c757d;font-size:12px;">No accounts found</p>';
-                    return;
-                }
-
-                decrypted.accounts.forEach((acc, idx) => {
-                    const div = document.createElement('div');
-                    div.className = 'account-item';
-                    div.innerHTML = `
-                        <span class="platform">${acc.platform}</span>
-                        <span class="username">${acc.username}</span>
-                        <button class="delete-account-btn" data-idx="${idx}" data-platform="${acc.platform}">Delete</button>
-                    `;
-                    container.appendChild(div);
-                });
-
-                container.querySelectorAll('.delete-account-btn').forEach(btn => {
-                    btn.addEventListener('click', async (e) => {
-                        const idx = parseInt(e.target.dataset.idx);
-                        const platform = e.target.dataset.platform;
-                        const account = decrypted.accounts[idx];
-
-                        if (confirm(`Are you sure you want to delete ${platform} account (${account.username})? This cannot be undone.`)) {
-                            // Start guided deletion
-                            chrome.runtime.sendMessage({
-                                type: 'start_guide',
-                                platform: platform
-                            });
-
-                            showStatus(`Deleting ${platform}... Follow the guided steps.`, 'success');
-
-                            e.target.textContent = 'Deleted';
-                            e.target.disabled = true;
-                            e.target.style.background = '#6c757d';
-                        }
-                    });
-                });
-
+                renderSettlementDashboard(decrypted, key);
                 showStatus('Settlement loaded successfully', 'success');
             }
         }
@@ -503,6 +522,126 @@ document.getElementById('beneficiaryVerifyBtn').addEventListener('click', async 
         showStatus('Verification failed: ' + e.message, 'error');
     }
 });
+
+// ---------- CF1 Fix: Settlement Dashboard with New-Tab Deletion ----------
+function renderSettlementDashboard(decrypted, recoveryKeyForVault) {
+    const container = document.getElementById('settlementAccounts');
+    container.innerHTML = `
+        <h4 style="font-size:13px;margin-bottom:8px;">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-right:4px; color: #dc3545;">
+                <line x1="8" y1="6" x2="21" y2="6"/>
+                <line x1="8" y1="12" x2="21" y2="12"/>
+                <line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/>
+                <line x1="3" y1="12" x2="3.01" y2="12"/>
+                <line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            <span style="vertical-align:middle;">Accounts to Delete</span>
+        </h4>
+    `;
+
+    if (!decrypted.accounts || decrypted.accounts.length === 0) {
+        container.innerHTML += '<p style="color:#6c757d;font-size:12px;">No accounts found</p>';
+        return;
+    }
+
+    decrypted.accounts.forEach((acc, idx) => {
+        const div = document.createElement('div');
+        div.className = 'account-item';
+        div.innerHTML = `
+            <span class="platform">${acc.platform}</span>
+            <span class="username">${acc.username}</span>
+            <button class="delete-account-btn" data-idx="${idx}" data-platform="${acc.platform}">Delete</button>
+        `;
+        container.appendChild(div);
+    });
+
+    // CF1 Fix: "Delete" opens a NEW TAB with auto-filled credentials
+    container.querySelectorAll('.delete-account-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const idx = parseInt(e.target.dataset.idx);
+            const platform = e.target.dataset.platform;
+            const account = decrypted.accounts[idx];
+
+            if (confirm(`Are you sure you want to delete the ${platform} account (${account.username})? This cannot be undone.`)) {
+                // Send credentials to background.js → opens new tab → auto-fills
+                chrome.runtime.sendMessage({
+                    type: 'open_settlement_tab',
+                    data: {
+                        platform: platform,
+                        username: account.username,
+                        password: account.password
+                    }
+                }, (response) => {
+                    if (response && response.status === 'ok') {
+                        showStatus(`Opening ${platform}... Follow the guided steps in the new tab.`, 'success');
+                        e.target.textContent = 'In Progress...';
+                        e.target.disabled = true;
+                        e.target.style.background = '#f0ad4e';
+                    } else {
+                        showStatus(`Failed to open ${platform}: ${response?.message || 'Unknown error'}`, 'error');
+                    }
+                });
+            }
+        });
+    });
+
+    // CF3 Fix: Add "Complete Settlement" button
+    const completeBtn = document.createElement('button');
+    completeBtn.id = 'completeSettlementBtn';
+    completeBtn.className = 'btn btn-danger btn-full';
+    completeBtn.style.marginTop = '12px';
+    completeBtn.textContent = 'Complete Settlement';
+    completeBtn.addEventListener('click', async () => {
+        if (!confirm('Are you sure all accounts have been deleted? This will finalize the settlement and clear all data.')) {
+            return;
+        }
+
+        try {
+            // Call backend to complete settlement (deletes vault, clears tokens)
+            await completeSettlementApi(settlementUserId);
+
+            // CF3 Fix: Clear only the necessary local data
+            await chrome.storage.local.remove([
+                'encryptedVault',
+                'recoveryKey',
+                'beneficiaryEmail',
+                'encryptedVault'
+            ]);
+            await chrome.storage.local.set({ userStatus: 'settled' });
+
+            // Clear session storage
+            if (chrome.storage.session) {
+                await chrome.storage.session.clear();
+            }
+
+            // Update UI
+            userStatus = 'settled';
+            updateStatusUI();
+            container.innerHTML = `
+                <div style="text-align:center; padding: 20px;">
+                    <div style="font-size: 32px; margin-bottom: 8px;">✓</div>
+                    <p style="font-size: 14px; font-weight: 600; color: #28a745;">Settlement Complete</p>
+                    <p style="font-size: 12px; color: #6c757d;">All accounts have been processed and data has been securely cleared.</p>
+                </div>
+            `;
+            showStatus('Settlement completed. All data cleared.', 'success');
+        } catch (e) {
+            showStatus('Failed to complete settlement: ' + e.message, 'error');
+        }
+    });
+    container.appendChild(completeBtn);
+}
+
+// Check if all accounts have been deleted (enables the Complete button)
+function checkAllAccountsDeleted() {
+    const buttons = document.querySelectorAll('.delete-account-btn');
+    const allDone = Array.from(buttons).every(btn => btn.disabled);
+    const completeBtn = document.getElementById('completeSettlementBtn');
+    if (completeBtn && allDone) {
+        completeBtn.style.animation = 'pulse 1s ease-in-out infinite';
+    }
+}
 
 // ---------- Helpers ----------
 function showStatus(message, type = 'info') {
