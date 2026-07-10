@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
-from ..database import supabase, verify_recovery_key, generate_settlement_token, generate_confirmation_token
+from ..database import supabase, verify_recovery_key, generate_settlement_token
 from ..models import VerifyRequest, SettlementTriggerRequest
 
 router = APIRouter(prefix="/api", tags=["settlement"])
@@ -77,7 +77,7 @@ async def confirm_owner_active(user_id: str, token: str):
     """Beneficiary confirms the owner is still active during grace period.
     
     Resets the owner's status back to 'active' and clears the grace period.
-    The token must match the one stored in the confirmation_token field.
+    The token must match the settlement_token stored during grace period.
     """
     user = supabase.table("users").select("*").eq("id", user_id).execute()
     if not user.data:
@@ -87,15 +87,15 @@ async def confirm_owner_active(user_id: str, token: str):
     if user_data["status"] != "grace_period":
         return {"status": "already_resolved", "message": "This user is no longer in grace period."}
 
-    # Verify confirmation token
-    if user_data.get("confirmation_token") != token:
+    # Verify token against the settlement_token stored during grace period
+    if user_data.get("settlement_token") != token:
         raise HTTPException(401, "Invalid confirmation token")
 
     # Reset to active
     supabase.table("users").update({
         "status": "active",
         "grace_period_start": None,
-        "confirmation_token": None,
+        "settlement_token": None,
         "last_heartbeat": datetime.utcnow().isoformat()
     }).eq("id", user_id).execute()
 
@@ -124,16 +124,15 @@ async def confirm_owner_inactive(user_id: str, token: str):
     if user_data["status"] != "grace_period":
         return {"status": "already_resolved", "message": "This user is no longer in grace period."}
 
-    # Verify confirmation token
-    if user_data.get("confirmation_token") != token:
+    # Verify token against the settlement_token stored during grace period
+    if user_data.get("settlement_token") != token:
         raise HTTPException(401, "Invalid confirmation token")
 
-    # Trigger settlement immediately
+    # Trigger settlement immediately — generate a fresh settlement token
     settlement_token = generate_settlement_token()
     supabase.table("users").update({
         "status": "deceased",
-        "settlement_token": settlement_token,
-        "confirmation_token": None
+        "settlement_token": settlement_token
     }).eq("id", user_id).execute()
 
     supabase.table("audit_logs").insert({

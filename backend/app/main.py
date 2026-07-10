@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 
@@ -15,7 +15,10 @@ from .models import UserRegisterRequest, UserResponse, SimulateInactivityRequest
 from .routes import heartbeat, settlement, vault
 
 # Import services
-from .services.notifications import send_grace_period_email, send_settlement_email
+from .services.notifications import (
+    send_grace_period_email, send_settlement_email,
+    send_beneficiary_grace_email, send_settlement_instructions_email
+)
 from .services.scheduler import check_inactive_users
 
 # Logging
@@ -128,7 +131,7 @@ async def get_user(user_id: str):
 
 # ---------- Admin Endpoints ----------
 @app.get("/api/admin/check-inactive")
-async def check_inactive():
+async def check_inactive(background_tasks: BackgroundTasks):
     """Manually trigger the inactivity check (also runs automatically every 24h)"""
     cutoff = (datetime.utcnow() - timedelta(days=30)).isoformat()
     inactive = supabase.table("users").select("*").eq("status", "active").lt("last_heartbeat", cutoff).execute()
@@ -136,21 +139,37 @@ async def check_inactive():
     results = {"inactive_users": [], "expired_grace": [], "settlement_triggered": []}
 
     for user in inactive.data:
+        # Generate a confirmation token for grace period
+        grace_token = generate_settlement_token()
+
         supabase.table("users").update({
             "status": "grace_period",
-            "grace_period_start": datetime.utcnow().isoformat()
+            "grace_period_start": datetime.utcnow().isoformat(),
+            "settlement_token": grace_token
         }).eq("id", user["id"]).execute()
         results["inactive_users"].append(user["email"])
 
-        # Send grace period email to owner
+        # Send grace period email to OWNER in background
         reset_link = f"http://localhost:8000/api/heartbeat"
-        email_result = send_grace_period_email(user["email"], reset_link)
-        logger.info(f"Grace period email to {user['email']}: {email_result}")
+        background_tasks.add_task(send_grace_period_email, user["email"], reset_link)
+
+        # Send grace period email to BENEFICIARY in background (if set)
+        if user.get("beneficiary_email"):
+            background_tasks.add_task(
+                send_beneficiary_grace_email,
+                user["beneficiary_email"],
+                user["email"],
+                user["id"],
+                grace_token
+            )
 
         supabase.table("audit_logs").insert({
             "user_id": user["id"],
             "action": "grace_period_started",
-            "metadata": {"email_sent": email_result.get("success", False)}
+            "metadata": {
+                "owner_email_queued": True,
+                "beneficiary_email_queued": bool(user.get("beneficiary_email"))
+            }
         }).execute()
 
     grace_cutoff = (datetime.utcnow() - timedelta(days=7)).isoformat()
@@ -165,11 +184,10 @@ async def check_inactive():
         results["expired_grace"].append(user["email"])
         results["settlement_triggered"].append(user["email"])
 
-        # Send settlement email to beneficiary (or owner if no beneficiary)
+        # Send settlement email to beneficiary in background
         recipient = user.get("beneficiary_email") or user["email"]
         settlement_link = "http://localhost:8000"
-        email_result = send_settlement_email(recipient, token, settlement_link)
-        logger.info(f"Settlement email to {recipient}: {email_result}")
+        background_tasks.add_task(send_settlement_email, recipient, token, settlement_link)
 
         supabase.table("audit_logs").insert({
             "user_id": user["id"],
@@ -177,7 +195,7 @@ async def check_inactive():
             "metadata": {
                 "token_generated": True,
                 "beneficiary_notified": recipient,
-                "email_sent": email_result.get("success", False)
+                "email_queued": True
             }
         }).execute()
 
@@ -210,7 +228,7 @@ async def simulate_inactivity(req: SimulateInactivityRequest):
     return {"status": "simulated", "last_heartbeat": old_date}
 
 @app.post("/api/admin/simulate-settlement")
-async def simulate_settlement(req: SimulateInactivityRequest):
+async def simulate_settlement(req: SimulateInactivityRequest, background_tasks: BackgroundTasks):
     """Jump a user directly to 'deceased' (final settlement) status for testing.
     
     Skips the 30-day inactivity and 7-day grace period entirely.
@@ -220,18 +238,28 @@ async def simulate_settlement(req: SimulateInactivityRequest):
     if not user.data:
         raise HTTPException(404, "User not found")
 
+    user_data = user.data[0]
     token = generate_settlement_token()
     supabase.table("users").update({
         "status": "deceased",
         "settlement_token": token,
-        "grace_period_start": None,
-        "confirmation_token": None
+        "grace_period_start": None
     }).eq("id", req.user_id).execute()
+
+    # Queue settlement emails in the background
+    recipient = user_data.get("beneficiary_email") or user_data["email"]
+    background_tasks.add_task(send_settlement_instructions_email, recipient, req.user_id)
+    background_tasks.add_task(send_settlement_email, recipient, token, "http://localhost:8000")
 
     supabase.table("audit_logs").insert({
         "user_id": req.user_id,
         "action": "simulate_settlement",
-        "metadata": {"token_generated": True, "simulated": True}
+        "metadata": {
+            "token_generated": True,
+            "simulated": True,
+            "beneficiary_notified": recipient,
+            "emails_queued": True
+        }
     }).execute()
 
     logger.info(f"Simulated final settlement for user {req.user_id}")
