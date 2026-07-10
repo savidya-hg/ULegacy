@@ -123,6 +123,7 @@ let vault = { accounts: [] };
 let userStatus = 'active';
 let lastHeartbeat = null;
 let isRegistered = false;
+let ownerEmail = null;
 let settlementUserId = null; // For beneficiary: the owner's user ID
 
 // DOM refs
@@ -137,13 +138,14 @@ const connectionStatus = document.getElementById('connectionStatus');
 // ---------- Load state from storage (single init point) ----------
 chrome.storage.local.get([
     'userId', 'recoveryKey', 'encryptedVault', 'userStatus',
-    'lastHeartbeat', 'isRegistered', 'beneficiaryEmail'
+    'lastHeartbeat', 'isRegistered', 'beneficiaryEmail', 'ownerEmail'
 ], async (result) => {
     userId = result.userId || null;
     recoveryKey = result.recoveryKey || null;
     if (result.userStatus) userStatus = result.userStatus;
     if (result.lastHeartbeat) lastHeartbeat = result.lastHeartbeat;
     if (result.isRegistered) isRegistered = result.isRegistered;
+    ownerEmail = result.ownerEmail || null;
 
     // Decrypt vault from local storage if we have the key
     if (result.encryptedVault && recoveryKey) {
@@ -161,6 +163,7 @@ chrome.storage.local.get([
     }
 
     updateStatusUI();
+    updateRegistrationUI();
     renderOwnerDashboard();
 
     // Check connection to backend
@@ -362,8 +365,8 @@ document.getElementById('generateKeyBtn').addEventListener('click', async () => 
 // Reset Timer (I'm Alive)
 document.getElementById('resetTimerBtn').addEventListener('click', async () => {
     if (!userId || !isRegistered) {
-        await registerUserWithBackend();
-        if (!userId) return;
+        showStatus('Please register the owner first using the registration box.', 'error');
+        return;
     }
 
     try {
@@ -382,8 +385,8 @@ document.getElementById('resetTimerBtn').addEventListener('click', async () => {
 // Test Trigger (30-day simulation)
 document.getElementById('testTriggerBtn').addEventListener('click', async () => {
     if (!userId || !isRegistered) {
-        await registerUserWithBackend();
-        if (!userId) return;
+        showStatus('Please register the owner first using the registration box.', 'error');
+        return;
     }
 
     try {
@@ -416,8 +419,8 @@ document.getElementById('testTriggerBtn').addEventListener('click', async () => 
 // Test Trigger: Final Settlement (skip grace period entirely)
 document.getElementById('testSettlementBtn').addEventListener('click', async () => {
     if (!userId || !isRegistered) {
-        await registerUserWithBackend();
-        if (!userId) return;
+        showStatus('Please register the owner first using the registration box.', 'error');
+        return;
     }
 
     try {
@@ -441,28 +444,55 @@ document.getElementById('testSettlementBtn').addEventListener('click', async () 
 });
 
 // ---------- Register User ----------
-async function registerUserWithBackend() {
-    const email = prompt('Enter your email to register:');
-    if (!email) return false;
+document.getElementById('registerOwnerBtn').addEventListener('click', async () => {
+    const email = document.getElementById('ownerEmailInput').value;
+    if (!email) {
+        showStatus('Please enter an email address', 'error');
+        return;
+    }
+    if (!email.includes('@')) {
+        showStatus('Please enter a valid email address', 'error');
+        return;
+    }
 
     if (!recoveryKey) {
         showStatus('Please generate a Recovery Key first', 'error');
-        return false;
+        return;
     }
 
     try {
-        // CF4 Fix: Hash the recovery key client-side before sending
+        // Hash the recovery key client-side before sending
         const keyHash = await hashKeyForServer(recoveryKey);
         const beneficiaryEmail = vault.beneficiaryEmail || null;
         const result = await registerUser(email, keyHash, beneficiaryEmail);
+        
         userId = result.id;
         isRegistered = true;
-        await chrome.storage.local.set({ userId, isRegistered });
+        ownerEmail = email;
+
+        await chrome.storage.local.set({ userId, isRegistered, ownerEmail });
+        updateRegistrationUI();
         showStatus('Registered successfully!', 'success');
-        return true;
+
+        // Sync local vault to server after registration completes
+        await saveVaultLocal();
     } catch (e) {
         showStatus('Registration failed: ' + e.message, 'error');
-        return false;
+    }
+});
+
+function updateRegistrationUI() {
+    const regFormRow = document.getElementById('registrationFormRow');
+    const regStatusText = document.getElementById('registrationStatusText');
+    const regEmailDisplay = document.getElementById('registeredEmailDisplay');
+
+    if (isRegistered && ownerEmail) {
+        if (regFormRow) regFormRow.classList.add('hidden');
+        if (regStatusText) regStatusText.classList.remove('hidden');
+        if (regEmailDisplay) regEmailDisplay.textContent = ownerEmail;
+    } else {
+        if (regFormRow) regFormRow.classList.remove('hidden');
+        if (regStatusText) regStatusText.classList.add('hidden');
     }
 }
 
