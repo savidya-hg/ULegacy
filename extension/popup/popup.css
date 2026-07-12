@@ -423,3 +423,9 @@ select.input-sm {
     background: #c1c7cd;
     border-radius: 2px;
 }
+
+/* Passive monitoring indicator pulse */
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.4); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(40, 167, 69, 0); }
+}

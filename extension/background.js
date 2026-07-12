@@ -34,37 +34,97 @@ const PLATFORM_LOGIN_URLS = {
 let userId = null;
 let userStatus = 'active';
 let lastHeartbeat = null;
+let heartbeatInFlight = false; // Prevent concurrent sends
 
-// Load state from storage
+// Load state from storage and check if a heartbeat is due (service worker startup)
 chrome.storage.local.get(['userId', 'userStatus', 'lastHeartbeat'], (result) => {
     userId = result.userId || null;
     userStatus = result.userStatus || 'active';
     lastHeartbeat = result.lastHeartbeat || null;
+
+    // Service worker just started (browser opened / extension reloaded)
+    // Check if we owe a heartbeat
+    if (userId) {
+        maybeSendHeartbeat('startup');
+    }
 });
 
-// ---------- Daily Heartbeat Alarm ----------
-chrome.alarms.create('heartbeat', { periodInMinutes: 1440 }); // 24 hours
+// ---------- Passive Activity Monitoring ----------
+// The dead man's switch should ONLY trigger if there is genuinely zero browser
+// usage for 30 days. We detect activity passively from multiple signals and
+// send a throttled heartbeat (at most once per 23 hours).
+
+// 1. Idle state listener — fires when the user returns from being idle/locked
+//    setDetectionInterval(300) = consider "idle" after 5 minutes of inactivity
+chrome.idle.setDetectionInterval(300);
+
+chrome.idle.onStateChanged.addListener((newState) => {
+    if (newState === 'active' && userId) {
+        maybeSendHeartbeat('idle_active');
+    }
+});
+
+// 2. Tab activation — user switched tabs (proves they're using the browser)
+chrome.tabs.onActivated.addListener(() => {
+    if (userId) {
+        maybeSendHeartbeat('tab_activated');
+    }
+});
+
+// 3. Navigation — user loaded a page
+chrome.webNavigation.onCompleted.addListener(() => {
+    if (userId) {
+        maybeSendHeartbeat('navigation');
+    }
+}, { url: [{ schemes: ['http', 'https'] }] });
+
+// 4. Backup alarm — fires every 24 hours in case the above signals miss
+//    (e.g. browser left open but minimized with no tab switches)
+chrome.alarms.create('heartbeat', { periodInMinutes: 1440 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === 'heartbeat' && userId) {
-        chrome.idle.queryState(60, async (state) => {
-            if (state !== 'idle') {
-                try {
-                    const result = await sendHeartbeat(userId);
-                    const now = new Date().toISOString();
-                    userStatus = result.user_status || 'active';
-                    await chrome.storage.local.set({
-                        lastHeartbeat: now,
-                        userStatus: userStatus
-                    });
-                    console.log('Heartbeat sent');
-                } catch (e) {
-                    console.error('Heartbeat failed', e);
-                }
+        // On alarm, check if user is active right now before sending
+        chrome.idle.queryState(300, async (state) => {
+            if (state === 'active') {
+                await maybeSendHeartbeat('alarm');
             }
         });
     }
 });
+
+// ---------- Throttled Heartbeat Sender ----------
+// Only sends if the last heartbeat was more than 23 hours ago.
+// This prevents flooding the server when multiple signals fire rapidly.
+const HEARTBEAT_INTERVAL_MS = 23 * 60 * 60 * 1000; // 23 hours
+
+async function maybeSendHeartbeat(source = 'unknown') {
+    if (!userId || heartbeatInFlight) return;
+
+    // Check throttle: skip if we sent a heartbeat recently
+    const now = new Date();
+    if (lastHeartbeat) {
+        const elapsed = now - new Date(lastHeartbeat);
+        if (elapsed < HEARTBEAT_INTERVAL_MS) return;
+    }
+
+    heartbeatInFlight = true;
+    try {
+        const result = await sendHeartbeat(userId);
+        const nowIso = now.toISOString();
+        userStatus = result.user_status || 'active';
+        lastHeartbeat = nowIso;
+        await chrome.storage.local.set({
+            lastHeartbeat: nowIso,
+            userStatus: userStatus
+        });
+        console.log(`Heartbeat sent (source: ${source})`);
+    } catch (e) {
+        console.error(`Heartbeat failed (source: ${source}):`, e);
+    } finally {
+        heartbeatInFlight = false;
+    }
+}
 
 // ---------- Message Handlers ----------
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

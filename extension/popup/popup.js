@@ -397,7 +397,7 @@ document.getElementById('generateKeyBtn').addEventListener('click', async () => 
     await saveVaultLocal();
 });
 
-// Reset Timer (I'm Alive)
+// Force Reset Timer (manual override — bypasses passive monitoring throttle)
 document.getElementById('resetTimerBtn').addEventListener('click', async () => {
     if (!userId || !isRegistered) {
         showStatus('Please register the owner first using the registration box.', 'error');
@@ -411,7 +411,7 @@ document.getElementById('resetTimerBtn').addEventListener('click', async () => {
         lastHeartbeat = now;
         await chrome.storage.local.set({ userStatus, lastHeartbeat });
         updateStatusUI();
-        showStatus('Timer reset successfully!', 'success');
+        showStatus('Timer force-reset! Passive monitoring will handle future heartbeats.', 'success');
     } catch (e) {
         showStatus('Error resetting timer: ' + e.message, 'error');
     }
