@@ -190,8 +190,9 @@ chrome.storage.local.get([
         });
     }
 
-    // Check connection to backend
+    // Check connection to backend and sync real status from server
     await checkConnection();
+    await syncStatusFromServer();
 });
 
 // ---------- Listen for account deletion completions from background ----------
@@ -221,7 +222,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
-// ---------- Check Connection ----------
+// ---------- Check Connection & Sync Status ----------
 async function checkConnection() {
     try {
         const response = await fetch(`${API_BASE}/`);
@@ -232,6 +233,28 @@ async function checkConnection() {
         }
     } catch (e) {
         connectionStatus.style.color = '#dc3545';
+    }
+}
+
+// Fetch real status from server — the single source of truth.
+// This keeps the popup UI in sync with the database and also writes
+// the server's last_heartbeat back to local storage so the background.js
+// throttle uses the correct timestamp.
+async function syncStatusFromServer() {
+    if (!userId || !isRegistered) return;
+    try {
+        const serverUser = await callApi(`/api/users/${userId}`);
+        if (serverUser) {
+            userStatus = serverUser.status;
+            lastHeartbeat = serverUser.last_heartbeat;
+            await chrome.storage.local.set({
+                userStatus: userStatus,
+                lastHeartbeat: lastHeartbeat
+            });
+            updateStatusUI();
+        }
+    } catch (e) {
+        console.warn('Could not sync status from server:', e.message);
     }
 }
 

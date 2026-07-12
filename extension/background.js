@@ -49,6 +49,18 @@ chrome.storage.local.get(['userId', 'userStatus', 'lastHeartbeat'], (result) => 
     }
 });
 
+// Keep in-memory state synced when popup or other contexts update storage
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.userId) userId = changes.userId.newValue || null;
+    if (changes.userStatus) userStatus = changes.userStatus.newValue || 'active';
+    if (changes.lastHeartbeat) {
+        lastHeartbeat = changes.lastHeartbeat.newValue || null;
+        // Storage was updated (e.g. popup synced from server) — check if we owe a heartbeat
+        if (userId) maybeSendHeartbeat('storage_sync');
+    }
+});
+
 // ---------- Passive Activity Monitoring ----------
 // The dead man's switch should ONLY trigger if there is genuinely zero browser
 // usage for 30 days. We detect activity passively from multiple signals and
