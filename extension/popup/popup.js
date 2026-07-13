@@ -543,16 +543,70 @@ function updateRegistrationUI() {
     const regFormRow = document.getElementById('registrationFormRow');
     const regStatusText = document.getElementById('registrationStatusText');
     const regEmailDisplay = document.getElementById('registeredEmailDisplay');
+    const editEmailRow = document.getElementById('editEmailRow');
+    const registeredDisplayRow = document.getElementById('registeredDisplayRow');
 
     if (isRegistered && ownerEmail) {
         if (regFormRow) regFormRow.classList.add('hidden');
         if (regStatusText) regStatusText.classList.remove('hidden');
         if (regEmailDisplay) regEmailDisplay.textContent = ownerEmail;
+        // Reset edit state
+        if (editEmailRow) editEmailRow.classList.add('hidden');
+        if (registeredDisplayRow) registeredDisplayRow.classList.remove('hidden');
     } else {
         if (regFormRow) regFormRow.classList.remove('hidden');
         if (regStatusText) regStatusText.classList.add('hidden');
     }
 }
+
+// Edit Email — toggle edit row
+document.getElementById('editEmailBtn').addEventListener('click', () => {
+    document.getElementById('registeredDisplayRow').classList.add('hidden');
+    document.getElementById('editEmailRow').classList.remove('hidden');
+    document.getElementById('editEmailInput').value = ownerEmail || '';
+    document.getElementById('editEmailInput').focus();
+});
+
+// Cancel Edit
+document.getElementById('cancelEditEmailBtn').addEventListener('click', () => {
+    document.getElementById('editEmailRow').classList.add('hidden');
+    document.getElementById('registeredDisplayRow').classList.remove('hidden');
+});
+
+// Save Updated Email — creates a new account with the new email
+document.getElementById('saveEmailBtn').addEventListener('click', async () => {
+    const newEmail = document.getElementById('editEmailInput').value.trim();
+    if (!newEmail || !newEmail.includes('@')) {
+        showStatus('Please enter a valid email address', 'error');
+        return;
+    }
+    if (newEmail === ownerEmail) {
+        showStatus('Email is unchanged', 'error');
+        return;
+    }
+    if (!recoveryKey) {
+        showStatus('Recovery key not found. Please generate one first.', 'error');
+        return;
+    }
+
+    try {
+        const keyHash = await hashKeyForServer(recoveryKey);
+        const beneficiaryEmail = vault.beneficiaryEmail || null;
+        const result = await registerUser(newEmail, keyHash, beneficiaryEmail);
+
+        userId = result.id;
+        ownerEmail = newEmail;
+        await chrome.storage.local.set({ userId, ownerEmail });
+
+        // Re-sync vault to the new account
+        await saveVaultLocal();
+
+        updateRegistrationUI();
+        showStatus('New account created with updated email!', 'success');
+    } catch (e) {
+        showStatus('Failed to create account: ' + e.message, 'error');
+    }
+});
 
 // ---------- Save Vault (encrypted in local storage + server sync) ----------
 async function saveVaultLocal() {

@@ -55,8 +55,17 @@
                     <input type="email" id="ownerEmailInput" placeholder="your-email@email.com" class="input-sm" style="flex: 1;">
                     <button id="registerOwnerBtn" class="btn btn-primary btn-sm">Register</button>
                 </div>
-                <div id="registrationStatusText" class="hidden" style="color: #28a745; font-weight: 500; font-size: 12px; margin-top: 4px;">
-                    ✓ Registered: <span id="registeredEmailDisplay" style="font-weight: 600;"></span>
+                <div id="registrationStatusText" class="hidden">
+                    <div id="registeredDisplayRow" style="display:flex; align-items:center; gap:6px; margin-top:4px;">
+                        <span style="color: #28a745; font-weight: 500; font-size: 12px;">✓ Registered:</span>
+                        <span id="registeredEmailDisplay" style="font-weight: 600; font-size: 12px; flex:1;"></span>
+                        <button id="editEmailBtn" class="btn btn-secondary btn-sm" style="padding:2px 8px; font-size:10px;">Edit</button>
+                    </div>
+                    <div id="editEmailRow" class="hidden form-row" style="margin-top:6px;">
+                        <input type="email" id="editEmailInput" placeholder="new-email@email.com" class="input-sm" style="flex:1;">
+                        <button id="saveEmailBtn" class="btn btn-primary btn-sm" style="padding:2px 8px;">Save</button>
+                        <button id="cancelEditEmailBtn" class="btn btn-secondary btn-sm" style="padding:2px 8px;">Cancel</button>
+                    </div>
                 </div>
             </div>
 

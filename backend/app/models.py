@@ -40,3 +40,7 @@ class UserRegisterRequest(BaseModel):
 class SimulateInactivityRequest(BaseModel):
     user_id: str
     date: Optional[str] = None
+
+class UpdateEmailRequest(BaseModel):
+    user_id: str
+    email: EmailStr
