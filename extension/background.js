@@ -252,5 +252,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // ---------- Extension Installed ----------
 chrome.runtime.onInstalled.addListener(() => {
+    // Grant content scripts access to session storage.
+    // Without this, content scripts cannot read settlementMode/credentials
+    // and autofill silently fails.
+    chrome.storage.session.setAccessLevel({
+        accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS'
+    });
     console.log('ULegacy installed');
 });
+
+// Also set on every service worker startup (in case the worker restarts
+// without triggering onInstalled, e.g. after a browser restart)
+chrome.storage.session.setAccessLevel({
+    accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS'
+}).catch(() => {});
