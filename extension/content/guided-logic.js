@@ -28,11 +28,21 @@ const PLATFORM_STEPS = {
         { type: 'click', text: 'Delete', instruction: 'Confirm deletion' }
     ],
     instagram: [
-        { type: 'navigate', url: '/accounts/remove/request/permanent/', instruction: 'Opening Instagram deletion page...' },
-        { type: 'wait', selector: 'select, input[type="password"]', instruction: 'Waiting for deletion form...' },
-        { type: 'fill_password', instruction: 'Entering password...' },
+        // Instagram's specific accounts center flow
+        { type: 'navigate', url: 'https://www.instagram.com/accounts/edit/', instruction: 'Opening Instagram Settings...' },
+        { type: 'wait', selector: 'body', instruction: 'Waiting for settings page to load...' },
+        { type: 'navigate', url: 'https://accountscenter.instagram.com/?theme=dark&entry_point=app_settings', instruction: 'Opening Accounts Center...' },
+        { type: 'wait', selector: 'body', instruction: 'Waiting for Accounts Center to load...' },
+        { type: 'navigate', url: 'https://accountscenter.instagram.com/manage/', instruction: 'Opening Accounts Management...' },
+        { type: 'wait', selector: 'body', instruction: 'Waiting for Management page to load...' },
+        { type: 'click', text: 'Manage', instruction: 'Clicking the "Manage" button...' },
+        { type: 'click', text: 'Deactivation or deletion', instruction: 'Selecting "Deactivation or deletion"...' },
+        { type: 'click', text: 'delete profile', instruction: 'Selecting "Delete profile"...' },
+        { type: 'click', text: 'Continue', instruction: 'Clicking Continue...' },
+        { type: 'click', text: 'Continue', instruction: 'Clicking Continue again...' },
+        { type: 'fill_password', instruction: 'Entering password if prompted...' },
         { type: 'captcha_check', instruction: 'Checking for security verification...' },
-        { type: 'click', text: 'Delete', instruction: 'Click Delete' }
+        { type: 'click', text: 'Delete', instruction: 'Clicking the final Delete button to confirm' }
     ],
     tiktok: [
         { type: 'navigate', url: '/settings/account/delete', instruction: 'Opening TikTok deletion page...' },
@@ -69,9 +79,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ---------- Init: Auto-start guide if in settlement mode ----------
 function initGuide() {
     if (chrome.storage && chrome.storage.session) {
-        chrome.storage.session.get(['settlementMode', 'settlementPlatform', 'settlementCredentials'], (result) => {
+        chrome.storage.session.get(['settlementMode', 'settlementPlatform', 'settlementCredentials', 'settlementStep'], (result) => {
             if (result.settlementMode && result.settlementPlatform && result.settlementCredentials) {
                 storedCredentials = result.settlementCredentials;
+                currentStep = result.settlementStep || 0;
                 // Small delay to let the page load
                 setTimeout(() => {
                     // Check if we're on the login page — if so, auto-fill first
@@ -163,11 +174,25 @@ function startGuide(platform) {
     }
 
     guideSteps = steps;
-    currentStep = 0;
+    // Keep the step loaded in initGuide, fallback to 0
+    if (currentStep === undefined || currentStep === null || currentStep >= guideSteps.length) {
+        currentStep = 0;
+    }
     isActive = true;
 
-    console.log('Starting guide for', platform);
+    console.log('Starting/resuming guide for', platform, 'at step', currentStep);
     processStep();
+}
+
+function saveStepAndProcess() {
+    if (chrome.storage && chrome.storage.session) {
+        chrome.storage.session.set({ settlementStep: currentStep }, () => {
+            console.log('ULegacy Guide: step saved to session storage:', currentStep);
+            processStep();
+        });
+    } else {
+        processStep();
+    }
 }
 
 function processStep() {
@@ -181,15 +206,25 @@ function processStep() {
 
     switch (step.type) {
         case 'navigate':
-            const url = new URL(window.location.href);
-            const newUrl = url.origin + step.url;
-            if (!window.location.pathname.startsWith(step.url)) {
-                showTooltip(step.instruction, null);
-                window.location.href = newUrl;
-                // Page will reload — guide resumes via initGuide()
-            } else {
+            let targetUrl = step.url;
+            if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+                targetUrl = window.location.origin + targetUrl;
+            }
+
+            const currentUrl = window.location.href.toLowerCase();
+            const targetUrlObj = new URL(targetUrl);
+            const currentUrlObj = new URL(currentUrl);
+
+            // Compare host and pathname (ignoring trailing slash)
+            const hostMatches = currentUrlObj.host === targetUrlObj.host;
+            const pathMatches = currentUrlObj.pathname.replace(/\/$/, '') === targetUrlObj.pathname.replace(/\/$/, '');
+
+            if (hostMatches && pathMatches) {
                 currentStep++;
-                processStep();
+                saveStepAndProcess();
+            } else {
+                showTooltip(step.instruction, null);
+                window.location.href = targetUrl;
             }
             break;
 
@@ -197,7 +232,7 @@ function processStep() {
             showTooltip(step.instruction, null);
             waitForElement(step.selector, (el) => {
                 currentStep++;
-                processStep();
+                saveStepAndProcess();
             }, 10000);
             break;
 
@@ -214,19 +249,19 @@ function processStep() {
                     fillInput(passwordField, storedCredentials.password);
                     showTooltip('Password entered automatically.', () => {
                         currentStep++;
-                        processStep();
+                        saveStepAndProcess();
                     });
                 } else if (passwordField) {
                     // Fallback: password field exists but no stored credentials
                     showTooltip('Please enter the account password manually, then click Next.', () => {
                         currentStep++;
-                        processStep();
+                        saveStepAndProcess();
                     });
                 } else {
                     // Timeout or not found — skip
                     console.warn('ULegacy: Password field not found for filling');
                     currentStep++;
-                    processStep();
+                    saveStepAndProcess();
                 }
             }, 5000);
             break;
@@ -236,18 +271,18 @@ function processStep() {
             if (detectCaptcha()) {
                 showTooltip('⚠️ Security check detected. Please complete the CAPTCHA, then click Next to continue.', () => {
                     currentStep++;
-                    processStep();
+                    saveStepAndProcess();
                 });
             } else {
                 // No captcha — continue immediately
                 currentStep++;
-                processStep();
+                saveStepAndProcess();
             }
             break;
 
         default:
             currentStep++;
-            processStep();
+            saveStepAndProcess();
     }
 }
 
@@ -266,13 +301,13 @@ function handleClickStep(step) {
             el.click();
             currentStep++;
             // Wait a moment for page to update after click
-            setTimeout(() => processStep(), 1000);
+            setTimeout(() => saveStepAndProcess(), 1000);
         });
     } else {
         // Element not found — ask user to do it manually
         showTooltip(`Cannot find the element. Please click "${step.text || 'the button'}" manually, then click Next.`, () => {
             currentStep++;
-            setTimeout(() => processStep(), 1000);
+            setTimeout(() => saveStepAndProcess(), 1000);
         });
     }
 }
@@ -329,7 +364,7 @@ function waitForElement(selector, callback, timeout) {
 
 function findByText(text) {
     if (!text) return null;
-    const elements = document.querySelectorAll('button, a, div[role="button"], span, label');
+    const elements = document.querySelectorAll('button, a, div[role="button"], span, label, div, p, li, [role="link"], [role="menuitem"]');
     for (const el of elements) {
         if (el.textContent && el.textContent.trim().toLowerCase().includes(text.toLowerCase())) {
             // Prefer smaller/more specific elements

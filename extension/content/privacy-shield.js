@@ -72,8 +72,30 @@ function applyBlur() {
         return;
     }
 
+    // Skip blurring/blocking on pages the beneficiary needs to interact with
+    const pathname = window.location.pathname.toLowerCase();
+    const SAFE_PATHS = [
+        '/settings', '/privacy', '/delete', '/deactivate',
+        '/account', '/profile', '/edit', '/login', '/signin',
+        '/accounts/remove', '/accounts/login', '/accounts/edit',
+        '/help', '/support', '/center', '/noscript',
+        '/personal-info', '/data-and-privacy', '/deleteaccount'
+    ];
+    if (SAFE_PATHS.some(p => pathname.includes(p))) {
+        console.log('ULegacy: On safe path, privacy shield skipped:', pathname);
+        return;
+    }
+
     // Determine which host we're on
     const host = window.location.hostname;
+    
+    // Skip accounts management subdomains as they don't contain personal content (feed/DMs)
+    // and need to be fully accessible for deletion.
+    if (host.includes('accountscenter.') || host.includes('accounts.') || host.includes('myaccount.google.')) {
+        console.log('ULegacy: On account center subdomain, privacy shield skipped:', host);
+        return;
+    }
+
     let matchedHost = null;
     for (const domain of Object.keys(SENSITIVE_SELECTORS)) {
         if (host.includes(domain)) {

@@ -26,7 +26,16 @@ const ALLOWED_PATHS = [
     '/login',
     '/signin',
     '/accounts/remove',
-    '/accounts/login'
+    '/accounts/login',
+    '/accounts/edit',
+    '/accounts_center',
+    '/account_center',
+    '/help',
+    '/support',
+    '/personal-info',
+    '/data-and-privacy',
+    '/deleteaccount',
+    '/noscript'
 ];
 
 let isSettlementMode = false;

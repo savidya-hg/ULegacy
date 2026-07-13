@@ -184,7 +184,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.storage.session.set({
             settlementMode: true,
             settlementPlatform: platform,
-            settlementCredentials: { username, password }
+            settlementCredentials: { username, password },
+            settlementStep: 0
         }, () => {
             // Open a floating popup window to the platform login page
             chrome.windows.create({
@@ -213,7 +214,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.storage.session.set({
             settlementMode: false,
             settlementPlatform: null,
-            settlementCredentials: null
+            settlementCredentials: null,
+            settlementStep: 0
         });
 
         // Close the temporary popup window
