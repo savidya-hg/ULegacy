@@ -1,3 +1,4 @@
+(() => {
 // privacy-shield.js - Content script that blurs sensitive content
 // PG1 Fix: ONLY activates when in settlement mode (new tab opened by extension)
 // CF2 Fix: If blurring fails, blocks the entire page as a fail-safe
@@ -18,7 +19,7 @@ const SENSITIVE_SELECTORS = {
     // Instagram — feed, DMs, stories, explore, reels
     'instagram.com': [
         'article[role="presentation"]',
-        'div[role="dialog"]',
+        'div[role="dialog"]:not(:has(input[type="password"])):not(:has(input[name*="password" i])):not(:has(input[autocomplete*="password" i]))',
         'main > section',
         'div[role="tablist"]'
     ],
@@ -279,6 +280,5 @@ function applyFullPageBlock(message) {
     document.body.appendChild(overlay);
 }
 
-// ---------- Init ----------
-// Only run when settlement mode is active
 checkSettlementMode();
+})();

@@ -1,3 +1,4 @@
+(() => {
 // auto-fill.js - Auto-fills credentials during settlement
 // CF1 Fix: Now properly wired up to read from chrome.storage.session
 // and fill login forms when in settlement mode.
@@ -126,6 +127,5 @@ function highlightElement(el) {
     }, 2000);
 }
 
-// ---------- Init ----------
-console.log('ULegacy Auto-Fill loaded');
 initAutoFill();
+})();

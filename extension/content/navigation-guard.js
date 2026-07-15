@@ -1,3 +1,4 @@
+(() => {
 // navigation-guard.js - Blocks navigation to sensitive pages
 // PG1 Fix: ONLY activates when in settlement mode (new tab opened by extension)
 
@@ -142,3 +143,4 @@ function showBlockedAlert() {
 
 // ---------- Init ----------
 initGuard();
+})();

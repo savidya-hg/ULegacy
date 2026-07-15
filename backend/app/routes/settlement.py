@@ -65,8 +65,8 @@ async def complete_settlement(req: SettlementTriggerRequest):
     supabase.table("users").update({
         "status": "settled",
         "settlement_token": None,
-        "recovery_key_hash": None,
-        "salt": None
+        "recovery_key_hash": "deleted",
+        "salt": "deleted"
     }).eq("id", req.user_id).execute()
 
     supabase.table("audit_logs").insert({

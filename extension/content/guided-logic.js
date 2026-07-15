@@ -1,3 +1,4 @@
+(() => {
 // guided-logic.js - Guides beneficiary through account deletion
 // CF1 Fix: Reads credentials from chrome.storage.session instead of prompt()
 // PG3 Fix: Detects CAPTCHAs and pauses for manual completion
@@ -44,8 +45,13 @@ const PLATFORM_STEPS = {
         { type: 'click', text: 'Continue', instruction: 'Clicking Continue...' },
         { type: 'click', text: 'Continue', instruction: 'Clicking Continue again...' },
         { type: 'click', text: 'Continue', instruction: 'Clicking Continue in review info...' },
+        // Step 15: The script stops and waits for the HUMAN to click Continue
+        { type: 'manual_click_wait', text: 'Continue', instruction: 'Meta security requires manual input. Please click the "Continue" button manually.' },
+        // Wait for the modal/password field to actually render in the DOM
+        { type: 'wait', selector: 'input[type="password"], input[name*="password" i], input[autocomplete*="password" i]', instruction: 'Waiting for security confirmation modal...' },
         { type: 'fill_password', instruction: 'Entering password automatically...' },
-        { type: 'click', text: 'Continue', instruction: 'Clicking Continue to confirm password...' },
+        // Sometimes the button in the modal says 'Continue', sometimes 'Submit' or 'Confirm'
+        { type: 'click', text: 'Continue|Submit|Confirm', instruction: 'Clicking Continue to confirm password...' },
         { type: 'captcha_check', instruction: 'Checking for security verification...' },
         { type: 'click', text: 'Delete profile | Delete account | Delete', instruction: 'Clicking the final Delete button to confirm' }
     ],
@@ -158,7 +164,7 @@ function autoFillLogin() {
                 ) || findByText('Log In') || findByText('Sign In') || findByText('Login') || findByText('Next');
 
                 if (submitBtn) {
-                    submitBtn.click();
+                    simulateReactClick(submitBtn);
                 }
             }, 800);
         }
@@ -241,6 +247,34 @@ function processStep() {
             }, 10000);
             break;
 
+        case 'manual_click_wait':
+            showTooltip('Locating button...', null);
+            waitForElement(null, (el) => {
+                if (el) {
+                    highlightElement(el);
+                    // Crucial: We DO NOT provide a 'Next' button in the tooltip here. 
+                    // We wait for the user to physically click the highlighted element.
+                    showTooltip(step.instruction, null);
+                    
+                    // Add a one-time listener to the body to detect when they click it
+                    const clickListener = (e) => {
+                        // If they clicked the highlighted button (or something inside it)
+                        if (el.contains(e.target) || e.target === el) {
+                            document.removeEventListener('click', clickListener, true);
+                            currentStep++;
+                            saveStepAndProcess();
+                        }
+                    };
+                    document.addEventListener('click', clickListener, true);
+                } else {
+                     showTooltip('Could not find the button. Please click Continue manually, then click Next.', () => {
+                         currentStep++;
+                         saveStepAndProcess();
+                     });
+                }
+            }, 10000, step.text); // Pass the text to search for
+            break;
+
         case 'click':
             handleClickStep(step);
             break;
@@ -303,7 +337,7 @@ function handleClickStep(step) {
     if (el) {
         highlightElement(el);
         showTooltip(step.instruction, () => {
-            el.click();
+            simulateReactClick(el);
             currentStep++;
             // Wait a moment for page to update after click
             setTimeout(() => saveStepAndProcess(), 1000);
@@ -325,7 +359,7 @@ function detectCaptcha() {
                 console.log('ULegacy: CAPTCHA detected via', selector);
                 return true;
             }
-        } catch (e) {}
+        } catch (e) { }
     }
     return false;
 }
@@ -349,16 +383,21 @@ function fillInput(el, value) {
     el.dispatchEvent(new Event('blur', { bubbles: true }));
 }
 
-function waitForElement(selector, callback, timeout) {
+function waitForElement(selector, callback, timeout, textToFind = null) {
     const start = Date.now();
     const check = () => {
-        const el = document.querySelector(selector);
+        let el = null;
+        if (selector) {
+            el = document.querySelector(selector);
+        } else if (textToFind) {
+            el = findByText(textToFind);
+        }
         if (el) {
             callback(el);
             return;
         }
         if (Date.now() - start > timeout) {
-            console.warn('Timeout waiting for element:', selector);
+            console.warn('Timeout waiting for element:', selector || textToFind);
             callback(null);
             return;
         }
@@ -367,40 +406,118 @@ function waitForElement(selector, callback, timeout) {
     check();
 }
 
+function simulateReactClick(element) {
+    if (!element) return;
+    try {
+        element.focus();
+    } catch (e) { }
+
+    // 1. Get exact center coordinates to bypass Meta's basic anti-bot checks
+    const rect = element.getBoundingClientRect();
+    const clientX = rect.left + (rect.width / 2);
+    const clientY = rect.top + (rect.height / 2);
+
+    // 2. Create options mimicking a real physical pointer device
+    const eventOptions = {
+        view: window,
+        bubbles: true,
+        cancelable: true,
+        buttons: 1,
+        clientX: clientX,
+        clientY: clientY,
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true
+    };
+
+    // 3. Fire the full sequence of React-expected events (Pointer + Mouse)
+    const events = [
+        new PointerEvent('pointerdown', eventOptions),
+        new MouseEvent('mousedown', eventOptions),
+        new PointerEvent('pointerup', eventOptions),
+        new MouseEvent('mouseup', eventOptions),
+        new MouseEvent('click', eventOptions)
+    ];
+
+    events.forEach(event => {
+        try {
+            element.dispatchEvent(event);
+        } catch (e) {
+            console.error('ULegacy: click dispatch failed:', e);
+        }
+    });
+}
+
 function findByText(text) {
     if (!text) return null;
-    const elements = document.querySelectorAll('button, a, div[role="button"], span, label, div, p, li, [role="link"], [role="menuitem"], input[type="radio"], input[type="checkbox"]');
     const targets = text.split('|').map(t => t.trim().toLowerCase());
-    
-    for (const el of elements) {
-        let elText = '';
-        if (el.tagName === 'INPUT' && (el.type === 'radio' || el.type === 'checkbox')) {
-            if (el.id) {
-                const label = document.querySelector(`label[for="${el.id}"]`);
-                if (label) elText = label.textContent || '';
-            }
-        } else {
-            elText = el.textContent || '';
-        }
-        
-        elText = elText.trim().toLowerCase();
-        if (targets.some(target => elText.includes(target))) {
-            // Check visibility using bounding rect and computed style to support fixed positioning elements
-            const rect = el.getBoundingClientRect();
-            if (rect.width > 0 || rect.height > 0) {
-                const style = window.getComputedStyle(el);
-                if (style.display !== 'none' && style.visibility !== 'hidden') {
-                    return el;
-                }
-            }
+
+    // Phase 1: Try interactive elements first (added [role="radio"])
+    const interactiveElements = document.querySelectorAll(
+        'button, a, div[role="button"], [role="link"], [role="menuitem"], [role="radio"], input[type="button"], input[type="submit"], input[type="radio"], input[type="checkbox"]'
+    );
+    for (const el of interactiveElements) {
+        if (checkElementMatch(el, targets, true)) {
+            return el;
         }
     }
+
+    // Phase 2: Try other text-bearing elements
+    const otherElements = document.querySelectorAll('span, label, div, p, li');
+    for (const el of otherElements) {
+        if (checkElementMatch(el, targets, false)) {
+            // FIX: If we matched text inside a span/div, find the actual clickable parent container.
+            // Otherwise, React ignores the click and the form validation fails.
+            const clickableParent = el.closest('button, a, [role="button"], [role="radio"], label, li');
+            return clickableParent || el;
+        }
+    }
+
     return null;
 }
 
+function checkElementMatch(el, targets, isInteractive) {
+    let elText = '';
+    if (el.tagName === 'INPUT' && (el.type === 'radio' || el.type === 'checkbox')) {
+        if (el.id) {
+            const label = document.querySelector(`label[for="${el.id}"]`);
+            if (label) elText = label.textContent || '';
+        }
+    } else {
+        elText = el.textContent || '';
+    }
+
+    elText = elText.trim().toLowerCase();
+    if (!elText) return false;
+
+    for (const target of targets) {
+        if (isInteractive) {
+            if (elText.includes(target)) {
+                if (isElementVisible(el)) return true;
+            }
+        } else {
+            // For non-interactive elements, we want a tighter match to avoid huge text blocks/containers
+            if (elText === target || (elText.includes(target) && elText.length < target.length + 12)) {
+                if (isElementVisible(el)) return true;
+            }
+        }
+    }
+    return false;
+}
+
+function isElementVisible(el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 && rect.height <= 0) return false;
+    const style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden';
+}
+
 function highlightElement(el) {
-    el.classList.add('ulegacy-guide-highlight');
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // DO NOT modify the element's classes or styles directly anymore to avoid React hydration crash (#418)
+    // el.classList.add('ulegacy-guide-highlight');
+    try {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (e) {}
 }
 
 function injectTooltipStyles() {
@@ -522,3 +639,4 @@ function completeGuide() {
 // ---------- Init ----------
 console.log('ULegacy Guided Logic loaded');
 initGuide();
+})();
