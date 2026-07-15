@@ -101,6 +101,9 @@ def send_grace_period_email(email: str, reset_link: str):
             <div style="text-align: center; margin: 30px 0;">
                 <p style="font-size: 16px; color: #2d3748; margin-bottom: 24px;">Your ULegacy account has been inactive for 30 days. Please click the button below to reset the timer:</p>
                 {_email_button("I'm Alive — Reset Timer", reset_link, "#28a745")}
+                <p style="font-size: 13px; color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 12px; border-radius: 8px; margin-top: 24px; text-align: left; line-height: 1.4;">
+                    <strong>Notice:</strong> If neither you nor the beneficiary responds within 7 days, the settlement process will begin automatically and you will receive further instructions via email.
+                </p>
             </div>
     """
     html += _email_footer()
@@ -108,7 +111,8 @@ def send_grace_period_email(email: str, reset_link: str):
     text = (
         "ULegacy Alert — Inactivity detected\n\n"
         "Your ULegacy account has been inactive for 30 days. Please click the link below to reset the timer:\n"
-        f"{reset_link}\n"
+        f"{reset_link}\n\n"
+        "Notice: If neither you nor the beneficiary responds within 7 days, the settlement process will begin automatically and you will receive further instructions via email.\n"
     )
     return send_email(email, "ULegacy Alert: Inactivity Detected", html, text)
 
@@ -120,24 +124,31 @@ def send_grace_period_email(email: str, reset_link: str):
 
 def send_owner_reported_inactive_email(email: str, reset_link: str):
     """Send alert email to owner when beneficiary has reported them inactive, giving them a reset button"""
-    html = _email_header("ULegacy Alert", "Inactivity Confirmation", "linear-gradient(135deg, #dc3545, #bd2130)")
+    html = _email_header("ULegacy Alert", "Settlement Notification", "linear-gradient(135deg, #e74c3c, #c0392b)")
     html += f"""
             <p style="font-size: 15px; color: #2d3748;">Dear Owner,</p>
             <p style="font-size: 15px; color: #2d3748;">
-                Your designated beneficiary has reported that you are currently inactive. As a result, the settlement process has been initiated.
+                This email is to notify you that your designated beneficiary has selected the **inactive** option during the account activity check. As a result, the digital settlement process has been initiated.
             </p>
-            <p style="font-size: 15px; color: #2d3748; font-weight: bold; color: #dc3545;">
-                If this is a mistake and you are active, please click the button below immediately to cancel the settlement and mark your account active again:
+            <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                <p style="font-size: 14px; color: #856404; margin: 0; line-height: 1.5;">
+                    <strong>If you are active and this is a mistake:</strong> You can still cancel this settlement process and restore your account status. Click the button below to reset your activity timer and set your account back to active.
+                </p>
+            </div>
+            <div style="text-align: center; margin: 25px 0;">
+                {_email_button("Cancel Settlement & Reset Timer", reset_link, "#28a745")}
+            </div>
+            <p style="font-size: 13px; color: #6c757d; border-top: 1px solid #e9ecf2; padding-top: 16px; margin-top: 20px;">
+                If you do not reset your status, the beneficiary will proceed with accessing and managing the designated digital assets.
             </p>
-            {_email_button("I'm Alive — Cancel Settlement & Reset Timer", reset_link, "#28a745")}
     """
     html += _email_footer()
 
     text = (
-        "ULegacy Alert — Inactivity Confirmation\n\n"
+        "ULegacy Alert — Settlement Notification\n\n"
         "Dear Owner,\n\n"
-        "Your designated beneficiary has reported that you are inactive. The settlement process has been initiated.\n\n"
-        "If this is a mistake, please click the link below immediately to cancel the settlement and reset your timer:\n"
+        "Your designated beneficiary has selected the inactive option. The settlement process has been initiated.\n\n"
+        "If you are active and this is a mistake, you can still cancel this process and restore your status. Please click the link below immediately to cancel the settlement and reset your timer:\n"
         f"{reset_link}\n"
     )
     return send_email(email, "ULegacy Alert: Settlement Process Initiated by Beneficiary", html, text)

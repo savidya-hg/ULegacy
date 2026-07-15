@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from .database import supabase, hash_recovery_key, verify_recovery_key, generate_settlement_token
 
 # Import models (single source of truth)
-from .models import UserRegisterRequest, UserResponse, SimulateInactivityRequest
+from .models import UserRegisterRequest, UserResponse, SimulateInactivityRequest, UpdateBeneficiaryRequest
 
 # Import routers
 from .routes import heartbeat, settlement, vault
@@ -128,6 +128,24 @@ async def get_user(user_id: str):
         created_at=user["created_at"],
         beneficiary_email=user.get("beneficiary_email")
     )
+
+@app.patch("/api/users/beneficiary")
+async def update_beneficiary(req: UpdateBeneficiaryRequest):
+    user = supabase.table("users").select("*").eq("id", req.user_id).execute()
+    if not user.data:
+        raise HTTPException(404, "User not found")
+
+    supabase.table("users").update({
+        "beneficiary_email": req.beneficiary_email
+    }).eq("id", req.user_id).execute()
+
+    supabase.table("audit_logs").insert({
+        "user_id": req.user_id,
+        "action": "beneficiary_updated",
+        "metadata": {"beneficiary_email": req.beneficiary_email}
+    }).execute()
+
+    return {"status": "updated", "beneficiary_email": req.beneficiary_email}
 
 # ---------- Admin Endpoints ----------
 @app.get("/api/admin/check-inactive")

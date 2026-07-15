@@ -393,7 +393,7 @@ document.getElementById('saveAccountBtn').addEventListener('click', async () => 
 
 // Save Beneficiary
 document.getElementById('saveBeneficiaryBtn').addEventListener('click', async () => {
-    const email = document.getElementById('beneficiaryEmail').value;
+    const email = document.getElementById('beneficiaryEmail').value.trim();
     if (!email) {
         showStatus('Please enter an email', 'error');
         return;
@@ -405,8 +405,22 @@ document.getElementById('saveBeneficiaryBtn').addEventListener('click', async ()
     vault.beneficiaryEmail = email;
     // Save beneficiary email separately (unencrypted — it's not sensitive)
     await chrome.storage.local.set({ beneficiaryEmail: email });
+    
+    // Update beneficiary email in database if registered
+    if (userId && isRegistered) {
+        try {
+            await callApi('/api/users/beneficiary', 'PATCH', {
+                user_id: userId,
+                beneficiary_email: email
+            });
+            console.log('Beneficiary updated on server');
+        } catch (e) {
+            console.error('Failed to update beneficiary on server:', e);
+        }
+    }
+
     await saveVaultLocal();
-    showStatus('Beneficiary saved', 'success');
+    showStatus('Beneficiary saved and synced!', 'success');
 });
 
 // Generate Recovery Key

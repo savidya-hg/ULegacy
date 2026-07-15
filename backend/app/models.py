@@ -44,3 +44,7 @@ class SimulateInactivityRequest(BaseModel):
 class UpdateEmailRequest(BaseModel):
     user_id: str
     email: EmailStr
+
+class UpdateBeneficiaryRequest(BaseModel):
+    user_id: str
+    beneficiary_email: EmailStr
