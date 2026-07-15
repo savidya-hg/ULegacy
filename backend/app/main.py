@@ -16,7 +16,7 @@ from .routes import heartbeat, settlement, vault
 
 # Import services
 from .services.notifications import (
-    send_grace_period_email, send_settlement_email,
+    send_grace_period_email,
     send_beneficiary_grace_email, send_settlement_instructions_email
 )
 from .services.scheduler import check_inactive_users
@@ -150,7 +150,7 @@ async def check_inactive(background_tasks: BackgroundTasks):
         results["inactive_users"].append(user["email"])
 
         # Send grace period email to OWNER in background
-        reset_link = f"http://localhost:8000/api/heartbeat"
+        reset_link = f"http://localhost:8000/api/settlement/confirm-active/{user['id']}/{grace_token}"
         background_tasks.add_task(send_grace_period_email, user["email"], reset_link)
 
         # Send grace period email to BENEFICIARY in background (if set)
@@ -184,10 +184,9 @@ async def check_inactive(background_tasks: BackgroundTasks):
         results["expired_grace"].append(user["email"])
         results["settlement_triggered"].append(user["email"])
 
-        # Send settlement email to beneficiary in background
+        # Send settlement instructions email to beneficiary in background
         recipient = user.get("beneficiary_email") or user["email"]
-        settlement_link = "http://localhost:8000"
-        background_tasks.add_task(send_settlement_email, recipient, token, settlement_link)
+        background_tasks.add_task(send_settlement_instructions_email, recipient, user["id"])
 
         supabase.table("audit_logs").insert({
             "user_id": user["id"],
@@ -246,10 +245,9 @@ async def simulate_settlement(req: SimulateInactivityRequest, background_tasks: 
         "grace_period_start": None
     }).eq("id", req.user_id).execute()
 
-    # Queue settlement emails in the background
+    # Queue settlement instructions email in the background
     recipient = user_data.get("beneficiary_email") or user_data["email"]
     background_tasks.add_task(send_settlement_instructions_email, recipient, req.user_id)
-    background_tasks.add_task(send_settlement_email, recipient, token, "http://localhost:8000")
 
     supabase.table("audit_logs").insert({
         "user_id": req.user_id,

@@ -6,7 +6,6 @@ from .notifications import (
     send_grace_period_email,
     send_beneficiary_grace_email,
     send_grace_reminder_email,
-    send_settlement_email,
     send_settlement_instructions_email
 )
 
@@ -45,7 +44,7 @@ async def check_inactive_users():
         }).eq("id", user["id"]).execute()
 
         # Email 1: Send grace period email to OWNER in background thread
-        reset_link = f"http://localhost:8000/api/heartbeat"
+        reset_link = f"http://localhost:8000/api/settlement/confirm-active/{user['id']}/{grace_token}"
         owner_email_result = await asyncio.to_thread(send_grace_period_email, user["email"], reset_link)
         logger.info(f"Grace period email to owner {user['email']}: {owner_email_result}")
 
@@ -91,7 +90,7 @@ async def check_inactive_users():
 
         days_remaining = 7 - reminder_day
         for user in grace_users.data:
-            reset_link = f"http://localhost:8000/api/heartbeat"
+            reset_link = f"http://localhost:8000/api/settlement/confirm-active/{user['id']}/{user['settlement_token']}"
             email_result = await asyncio.to_thread(send_grace_reminder_email, user["email"], days_remaining, reset_link)
             logger.info(f"Grace reminder ({days_remaining} days left) to {user['email']}: {email_result}")
 
@@ -119,17 +118,10 @@ async def check_inactive_users():
             "settlement_token": token
         }).eq("id", user["id"]).execute()
 
-        # Send settlement instructions to beneficiary (or owner as fallback)
+        # Send the settlement instructions email to beneficiary (single email with user ID)
         recipient = user.get("beneficiary_email") or user["email"]
-
-        # Send the detailed instructions email in background thread
         instructions_result = await asyncio.to_thread(send_settlement_instructions_email, recipient, user["id"])
         logger.info(f"Settlement instructions to {recipient}: {instructions_result}")
-
-        # Also send the settlement notification email in background thread
-        settlement_link = "http://localhost:8000"
-        settlement_result = await asyncio.to_thread(send_settlement_email, recipient, token, settlement_link)
-        logger.info(f"Settlement notification to {recipient}: {settlement_result}")
 
         # Audit log
         supabase.table("audit_logs").insert({
@@ -139,7 +131,6 @@ async def check_inactive_users():
                 "token_generated": True,
                 "beneficiary_notified": recipient,
                 "instructions_sent": instructions_result.get("success", False),
-                "settlement_sent": settlement_result.get("success", False),
                 "triggered_by": "scheduler"
             }
         }).execute()

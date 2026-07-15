@@ -18,7 +18,11 @@ async def verify_recovery_endpoint(req: VerifyRequest):
 
     user_data = user.data[0]
 
-    if user_data["status"] not in ["deceased", "grace_period"]:
+    if user_data["status"] == "active":
+        raise HTTPException(400, "Cannot start settlement: Owner account is currently active.")
+    if user_data["status"] == "grace_period":
+        raise HTTPException(400, "Cannot start settlement: Account is in grace period.")
+    if user_data["status"] != "deceased":
         raise HTTPException(400, "User is not in settlement state")
 
     # Verify using client-provided SHA-256 hash
@@ -45,11 +49,14 @@ async def complete_settlement(req: SettlementTriggerRequest):
     
     Deletes the encrypted vault from the database and clears the
     settlement token. The user record is kept for audit trail purposes
-    but marked as 'settled'.
+    but marked as 'settled'. Sends a completion report email with full
+    audit logs to both the owner and the beneficiary.
     """
     user = supabase.table("users").select("*").eq("id", req.user_id).execute()
     if not user.data:
         raise HTTPException(404, "User not found")
+
+    user_data = user.data[0]
 
     # Delete encrypted vault from server
     supabase.table("vaults").delete().eq("user_id", req.user_id).execute()
@@ -68,26 +75,47 @@ async def complete_settlement(req: SettlementTriggerRequest):
         "metadata": {"settled_at": datetime.utcnow().isoformat()}
     }).execute()
 
+    # Fetch full audit trail for this user (ordered by time)
+    audit_logs_result = (
+        supabase.table("audit_logs")
+        .select("*")
+        .eq("user_id", req.user_id)
+        .order("created_at", desc=False)
+        .execute()
+    )
+    audit_logs = audit_logs_result.data if audit_logs_result.data else []
+
+    # Send completion report emails to both owner and beneficiary
+    from ..services.notifications import send_settlement_complete_email
+
+    owner_email = user_data.get("email")
+    beneficiary_email = user_data.get("beneficiary_email")
+
+    if owner_email:
+        send_settlement_complete_email(owner_email, req.user_id, audit_logs, is_owner=True)
+    if beneficiary_email:
+        send_settlement_complete_email(beneficiary_email, req.user_id, audit_logs, is_owner=False)
+
     return {"status": "complete"}
 
 # ---------- Beneficiary Grace Period Confirmation Endpoints ----------
 
 @router.get("/settlement/confirm-active/{user_id}/{token}")
 async def confirm_owner_active(user_id: str, token: str):
-    """Beneficiary confirms the owner is still active during grace period.
+    """Confirm the owner is still active. Can be triggered by beneficiary or owner.
     
-    Resets the owner's status back to 'active' and clears the grace period.
-    The token must match the settlement_token stored during grace period.
+    Resets the owner's status back to 'active' and clears the grace/settlement period.
+    The token must match the settlement_token stored in the database.
     """
     user = supabase.table("users").select("*").eq("id", user_id).execute()
     if not user.data:
         raise HTTPException(404, "User not found")
 
     user_data = user.data[0]
-    if user_data["status"] != "grace_period":
-        return {"status": "already_resolved", "message": "This user is no longer in grace period."}
+    if user_data["status"] not in ["grace_period", "deceased"]:
+        return {"status": "already_resolved", "message": "This account is already active or fully settled."}
 
-    # Verify token against the settlement_token stored during grace period
+    # Verify token against the settlement_token stored in database
     if user_data.get("settlement_token") != token:
         raise HTTPException(401, "Invalid confirmation token")
 
@@ -101,20 +129,24 @@ async def confirm_owner_active(user_id: str, token: str):
 
     supabase.table("audit_logs").insert({
         "user_id": user_id,
-        "action": "beneficiary_confirmed_active",
-        "metadata": {"confirmed_at": datetime.utcnow().isoformat()}
+        "action": "owner_marked_active",
+        "metadata": {
+            "previous_status": user_data["status"],
+            "confirmed_at": datetime.utcnow().isoformat()
+        }
     }).execute()
 
     return {
         "status": "confirmed_active",
-        "message": "Thank you. The owner has been marked as active and the grace period has been cancelled."
+        "message": "Thank you. The account has been marked as active and the grace period/settlement has been cancelled."
     }
 
 @router.get("/settlement/confirm-inactive/{user_id}/{token}")
 async def confirm_owner_inactive(user_id: str, token: str):
     """Beneficiary confirms the owner is inactive — triggers immediate settlement.
     
-    Skips the remaining grace period and moves directly to settlement.
+    Skips the remaining grace period, moves directly to settlement, sends settlement instructions
+    to the beneficiary, and alerts the owner with a timer-reset option.
     """
     user = supabase.table("users").select("*").eq("id", user_id).execute()
     if not user.data:
@@ -145,9 +177,19 @@ async def confirm_owner_inactive(user_id: str, token: str):
     }).execute()
 
     # Send settlement instructions email to beneficiary
-    from ..services.notifications import send_settlement_instructions_email
+    from ..services.notifications import (
+        send_settlement_instructions_email,
+        send_owner_reported_inactive_email,
+        BASE_URL
+    )
+    
     recipient = user_data.get("beneficiary_email") or user_data["email"]
     send_settlement_instructions_email(recipient, user_id)
+
+    # Also notify the owner that their beneficiary marked them inactive, offering a reset timer option
+    if user_data.get("email"):
+        owner_reset_link = f"{BASE_URL}/api/settlement/confirm-active/{user_id}/{settlement_token}"
+        send_owner_reported_inactive_email(user_data["email"], owner_reset_link)
 
     return {
         "status": "settlement_triggered",

@@ -1,6 +1,7 @@
 import os
 import smtplib
 import logging
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
@@ -95,26 +96,51 @@ def _email_warning_box(text: str):
 
 def send_grace_period_email(email: str, reset_link: str):
     """Send grace period notification to owner — 30 days inactive, 7 days to respond"""
-    html = _email_header("ULegacy", "Are you still with us?")
+    html = _email_header("ULegacy Alert", "Inactivity detected")
     html += f"""
-            <p style="font-size: 15px; color: #2d3748;">Dear Owner,</p>
-            <p style="font-size: 15px; color: #2d3748;">Your ULegacy account has been <strong>inactive for 30 days</strong>.</p>
-            <p style="font-size: 15px; color: #2d3748;">If you're still alive and well, please open your browser extension or click the button below to reset the timer:</p>
-            {_email_button("I'm Alive — Reset Timer", reset_link, "#28a745")}
-            <p style="font-size: 14px; color: #6c757d; border-top: 1px solid #e9ecf2; padding-top: 16px;">
-                If we don't hear from you in <strong>7 days</strong>, your designated beneficiary will be notified and the settlement process will begin.
-            </p>
+            <div style="text-align: center; margin: 30px 0;">
+                <p style="font-size: 16px; color: #2d3748; margin-bottom: 24px;">Your ULegacy account has been inactive for 30 days. Please click the button below to reset the timer:</p>
+                {_email_button("I'm Alive — Reset Timer", reset_link, "#28a745")}
+            </div>
     """
     html += _email_footer()
 
     text = (
-        "ULegacy — Are you still with us?\n\n"
-        "Dear Owner,\n\n"
-        "Your ULegacy account has been inactive for 30 days.\n"
-        "If you're still alive and well, please open your browser extension to reset the timer.\n\n"
-        "If we don't hear from you in 7 days, your designated beneficiary will be notified.\n"
+        "ULegacy Alert — Inactivity detected\n\n"
+        "Your ULegacy account has been inactive for 30 days. Please click the link below to reset the timer:\n"
+        f"{reset_link}\n"
     )
-    return send_email(email, "ULegacy: Are you still there?", html, text)
+    return send_email(email, "ULegacy Alert: Inactivity Detected", html, text)
+
+# ==========================================================================
+# EMAIL TYPE 1B: Owner Reported Inactive Alert
+# Sent when the beneficiary reports the owner as inactive.
+# Gives the owner a link to cancel settlement and reset status to active.
+# ==========================================================================
+
+def send_owner_reported_inactive_email(email: str, reset_link: str):
+    """Send alert email to owner when beneficiary has reported them inactive, giving them a reset button"""
+    html = _email_header("ULegacy Alert", "Inactivity Confirmation", "linear-gradient(135deg, #dc3545, #bd2130)")
+    html += f"""
+            <p style="font-size: 15px; color: #2d3748;">Dear Owner,</p>
+            <p style="font-size: 15px; color: #2d3748;">
+                Your designated beneficiary has reported that you are currently inactive. As a result, the settlement process has been initiated.
+            </p>
+            <p style="font-size: 15px; color: #2d3748; font-weight: bold; color: #dc3545;">
+                If this is a mistake and you are active, please click the button below immediately to cancel the settlement and mark your account active again:
+            </p>
+            {_email_button("I'm Alive — Cancel Settlement & Reset Timer", reset_link, "#28a745")}
+    """
+    html += _email_footer()
+
+    text = (
+        "ULegacy Alert — Inactivity Confirmation\n\n"
+        "Dear Owner,\n\n"
+        "Your designated beneficiary has reported that you are inactive. The settlement process has been initiated.\n\n"
+        "If this is a mistake, please click the link below immediately to cancel the settlement and reset your timer:\n"
+        f"{reset_link}\n"
+    )
+    return send_email(email, "ULegacy Alert: Settlement Process Initiated by Beneficiary", html, text)
 
 # ==========================================================================
 # EMAIL TYPE 2: Grace Period — Beneficiary Notification
@@ -273,53 +299,121 @@ def send_settlement_instructions_email(email: str, user_id: str):
     return send_email(email, "ULegacy: Settlement Process — Action Required", html, text)
 
 # ==========================================================================
-# EMAIL TYPE 5: Settlement Triggered — Beneficiary (Original, updated)
-# Sent when the 7-day grace period expires with no response from anyone.
+# EMAIL TYPE 5: Settlement Complete — Owner & Beneficiary
+# Sent after the beneficiary completes the settlement process.
+# Contains a full activity log of all actions taken during settlement.
 # ==========================================================================
 
-def send_settlement_email(email: str, token: str, settlement_link: str):
-    """Send settlement notification to beneficiary — owner confirmed inactive after full 7-day expiry"""
-    html = _email_header("ULegacy", "Digital Will Settlement", "linear-gradient(135deg, #1a1a2e, #16213e)")
+def send_settlement_complete_email(email: str, user_id: str, audit_logs: list, is_owner: bool = False):
+    """Send settlement completion report to owner or beneficiary with full audit trail."""
+    role = "Owner" if is_owner else "Beneficiary"
+    greeting = "Dear Account Owner," if is_owner else "Dear Beneficiary,"
+
+    # Build the audit log rows
+    log_rows = ""
+    for log in audit_logs:
+        timestamp = log.get("created_at", "—")
+        # Format the timestamp nicely
+        try:
+            dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            formatted_time = dt.strftime("%b %d, %Y at %I:%M %p UTC")
+        except Exception:
+            formatted_time = timestamp
+
+        action = log.get("action", "unknown").replace("_", " ").title()
+        metadata = log.get("metadata", {})
+
+        # Build a human-readable detail string from metadata
+        details = []
+        if metadata.get("triggered_by"):
+            details.append(f"Triggered by: {metadata['triggered_by']}")
+        if metadata.get("platform"):
+            details.append(f"Platform: {metadata['platform']}")
+        if metadata.get("settled_at"):
+            details.append("Finalized")
+        if metadata.get("old_email"):
+            details.append(f"Changed from {metadata['old_email']}")
+        if metadata.get("beneficiary_notified"):
+            details.append(f"Notified: {metadata['beneficiary_notified']}")
+        detail_str = "; ".join(details) if details else "—"
+
+        # Color-code by action type
+        if "complete" in log.get("action", ""):
+            dot_color = "#28a745"
+        elif "deleted" in log.get("action", ""):
+            dot_color = "#dc3545"
+        elif "verified" in log.get("action", ""):
+            dot_color = "#4a00e0"
+        elif "triggered" in log.get("action", ""):
+            dot_color = "#f0ad4e"
+        else:
+            dot_color = "#6c757d"
+
+        log_rows += f"""
+            <tr>
+                <td style="padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 12px; color: #6c757d; white-space: nowrap; vertical-align: top;">{formatted_time}</td>
+                <td style="padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 13px; vertical-align: top;">
+                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: {dot_color}; margin-right: 6px; vertical-align: middle;"></span>
+                    <strong style="color: #2d3748;">{action}</strong>
+                </td>
+                <td style="padding: 8px 10px; border-bottom: 1px solid #f0f0f0; font-size: 12px; color: #6c757d; vertical-align: top;">{detail_str}</td>
+            </tr>"""
+
+    html = _email_header("ULegacy", "Settlement Complete ✓", "linear-gradient(135deg, #28a745, #20c997)")
     html += f"""
-            <p style="font-size: 15px; color: #2d3748;">Dear Beneficiary,</p>
+            <p style="font-size: 15px; color: #2d3748;">{greeting}</p>
             <p style="font-size: 15px; color: #2d3748;">
-                The account owner has been <strong>inactive for over 37 days</strong> 
-                and has not responded to our verification attempts during the 7-day grace period.
+                The settlement process for ULegacy account <strong style="font-family: monospace; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-size: 12px;">{user_id}</strong> has been <strong style="color: #28a745;">completed successfully</strong>.
             </p>
             <p style="font-size: 15px; color: #2d3748;">
-                As the designated beneficiary, the settlement process is now available. 
-                Please follow the instructions below to begin managing the owner's digital accounts.
+                Below is a complete log of all actions performed during the settlement process for your records.
             </p>
 
-            <div style="background: white; border: 1px solid #e9ecf2; border-radius: 8px; padding: 16px; margin: 16px 0;">
-                <h3 style="font-size: 14px; color: #2d3748; margin: 0 0 8px;">What to do next:</h3>
-                <ol style="font-size: 14px; color: #2d3748; padding-left: 20px;">
-                    <li style="margin: 6px 0;">Open the ULegacy Chrome extension</li>
-                    <li style="margin: 6px 0;">Switch to <strong>Beneficiary</strong> mode</li>
-                    <li style="margin: 6px 0;">Enter the <strong>Recovery Key</strong> and <strong>User ID</strong> (provided separately)</li>
-                    <li style="margin: 6px 0;">Click <strong>Verify & Load</strong></li>
-                    <li style="margin: 6px 0;">Delete each account using the guided process</li>
-                    <li style="margin: 6px 0;">Click <strong>Complete Settlement</strong> when finished</li>
-                </ol>
+            <div style="background: white; border: 1px solid #e9ecf2; border-radius: 8px; padding: 0; margin: 20px 0; overflow: hidden;">
+                <div style="background: #f8f9fa; padding: 10px 16px; border-bottom: 1px solid #e9ecf2;">
+                    <h3 style="font-size: 14px; color: #2d3748; margin: 0;">📋 Settlement Activity Log</h3>
+                </div>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #fafbfc;">
+                            <th style="padding: 8px 10px; text-align: left; font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e9ecf2;">Timestamp</th>
+                            <th style="padding: 8px 10px; text-align: left; font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e9ecf2;">Action</th>
+                            <th style="padding: 8px 10px; text-align: left; font-size: 11px; color: #6c757d; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #e9ecf2;">Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {log_rows if log_rows else '<tr><td colspan="3" style="padding: 16px; text-align: center; color: #adb5bd;">No detailed logs available.</td></tr>'}
+                    </tbody>
+                </table>
             </div>
 
-            {_email_warning_box("You will need the Recovery Key to decrypt and access the accounts. Without it, the data cannot be recovered.")}
-            <p style="font-size: 13px; color: #6c757d;">This settlement link will expire in 30 days.</p>
+            <div style="background: #d4edda; padding: 12px 16px; border-radius: 8px; margin: 16px 0;">
+                <p style="font-size: 13px; color: #155724; margin: 0;">
+                    ✅ All designated accounts have been processed. The encrypted vault has been permanently deleted from ULegacy servers. No recoverable data remains.
+                </p>
+            </div>
+
+            <p style="font-size: 13px; color: #6c757d; border-top: 1px solid #e9ecf2; padding-top: 16px;">
+                This email serves as your official record of the settlement process. Please keep it for your reference.
+            </p>
     """
     html += _email_footer()
 
+    # Plain-text version
+    log_text_lines = ""
+    for log in audit_logs:
+        timestamp = log.get("created_at", "—")
+        action = log.get("action", "unknown").replace("_", " ").title()
+        log_text_lines += f"  • {timestamp} — {action}\n"
+
     text = (
-        "ULegacy — Digital Will Settlement\n\n"
-        "Dear Beneficiary,\n\n"
-        "The account owner has been inactive for over 37 days and has not responded.\n\n"
-        "To begin the settlement process:\n"
-        "1. Open the ULegacy Chrome extension\n"
-        "2. Switch to Beneficiary mode\n"
-        "3. Enter Recovery Key and User ID\n"
-        "4. Click Verify & Load\n"
-        "5. Delete each account using the guided process\n"
-        "6. Click Complete Settlement when finished\n\n"
-        "You need the Recovery Key to proceed.\n"
-        "This link expires in 30 days.\n"
+        f"ULegacy — Settlement Complete\n\n"
+        f"{greeting}\n\n"
+        f"The settlement for account {user_id} has been completed successfully.\n\n"
+        f"Activity Log:\n{log_text_lines}\n"
+        "All encrypted data has been permanently deleted.\n"
+        "Please keep this email for your records.\n"
     )
-    return send_email(email, "ULegacy: Digital Will Settlement", html, text)
+
+    subject = "ULegacy: Settlement Complete — Activity Report"
+    return send_email(email, subject, html, text)
