@@ -36,13 +36,18 @@ const PLATFORM_STEPS = {
         { type: 'navigate', url: 'https://accountscenter.instagram.com/manage/', instruction: 'Opening Accounts Management...' },
         { type: 'wait', selector: 'body', instruction: 'Waiting for Management page to load...' },
         { type: 'click', text: 'Manage', instruction: 'Clicking the "Manage" button...' },
-        { type: 'click', text: 'Deactivation or deletion', instruction: 'Selecting "Deactivation or deletion"...' },
-        { type: 'click', text: 'delete profile', instruction: 'Selecting "Delete profile"...' },
+        { type: 'click', text: 'Deactivation or deletion | Deactivation & deletion', instruction: 'Selecting "Deactivation or deletion"...' },
+        { type: 'click', text: 'delete profile | delete account', instruction: 'Selecting "Delete profile"...' },
         { type: 'click', text: 'Continue', instruction: 'Clicking Continue...' },
         { type: 'click', text: 'Continue', instruction: 'Clicking Continue again...' },
-        { type: 'fill_password', instruction: 'Entering password if prompted...' },
+        { type: 'click', text: 'Privacy concerns', instruction: 'Selecting "Privacy concerns" as the reason...' },
+        { type: 'click', text: 'Continue', instruction: 'Clicking Continue...' },
+        { type: 'click', text: 'Continue', instruction: 'Clicking Continue again...' },
+        { type: 'click', text: 'Continue', instruction: 'Clicking Continue in review info...' },
+        { type: 'fill_password', instruction: 'Entering password automatically...' },
+        { type: 'click', text: 'Continue', instruction: 'Clicking Continue to confirm password...' },
         { type: 'captcha_check', instruction: 'Checking for security verification...' },
-        { type: 'click', text: 'Delete', instruction: 'Clicking the final Delete button to confirm' }
+        { type: 'click', text: 'Delete profile | Delete account | Delete', instruction: 'Clicking the final Delete button to confirm' }
     ],
     tiktok: [
         { type: 'navigate', url: '/settings/account/delete', instruction: 'Opening TikTok deletion page...' },
@@ -244,7 +249,7 @@ function processStep() {
         // Wait up to 5 seconds for the password field to exist in case of modals/transitions
         case 'fill_password':
             showTooltip('Waiting for password input...', null);
-            waitForElement('input[type="password"]', (passwordField) => {
+            waitForElement('input[type="password"], input[name="password"]', (passwordField) => {
                 if (passwordField && storedCredentials) {
                     fillInput(passwordField, storedCredentials.password);
                     showTooltip('Password entered automatically.', () => {
@@ -263,7 +268,7 @@ function processStep() {
                     currentStep++;
                     saveStepAndProcess();
                 }
-            }, 5000);
+            }, 10000);
             break;
 
         // PG3 Fix: Check for CAPTCHA and pause if detected
@@ -364,12 +369,29 @@ function waitForElement(selector, callback, timeout) {
 
 function findByText(text) {
     if (!text) return null;
-    const elements = document.querySelectorAll('button, a, div[role="button"], span, label, div, p, li, [role="link"], [role="menuitem"]');
+    const elements = document.querySelectorAll('button, a, div[role="button"], span, label, div, p, li, [role="link"], [role="menuitem"], input[type="radio"], input[type="checkbox"]');
+    const targets = text.split('|').map(t => t.trim().toLowerCase());
+    
     for (const el of elements) {
-        if (el.textContent && el.textContent.trim().toLowerCase().includes(text.toLowerCase())) {
-            // Prefer smaller/more specific elements
-            if (el.offsetParent !== null) { // Check if visible
-                return el;
+        let elText = '';
+        if (el.tagName === 'INPUT' && (el.type === 'radio' || el.type === 'checkbox')) {
+            if (el.id) {
+                const label = document.querySelector(`label[for="${el.id}"]`);
+                if (label) elText = label.textContent || '';
+            }
+        } else {
+            elText = el.textContent || '';
+        }
+        
+        elText = elText.trim().toLowerCase();
+        if (targets.some(target => elText.includes(target))) {
+            // Check visibility using bounding rect and computed style to support fixed positioning elements
+            const rect = el.getBoundingClientRect();
+            if (rect.width > 0 || rect.height > 0) {
+                const style = window.getComputedStyle(el);
+                if (style.display !== 'none' && style.visibility !== 'hidden') {
+                    return el;
+                }
             }
         }
     }
@@ -381,10 +403,79 @@ function highlightElement(el) {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+function injectTooltipStyles() {
+    if (document.getElementById('ulegacy-guide-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'ulegacy-guide-styles';
+    style.textContent = `
+        .ulegacy-guide-highlight {
+            outline: 4px solid #ff6b6b !important;
+            outline-offset: 3px !important;
+            background: rgba(255, 243, 205, 0.3) !important;
+            border-radius: 4px !important;
+            transition: outline 0.3s ease !important;
+            position: relative !important;
+            z-index: 2147483646 !important;
+        }
+        .ulegacy-guide-tooltip {
+            position: fixed !important;
+            top: 20px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            background: #1a1a2e !important;
+            color: white !important;
+            padding: 16px 24px !important;
+            border-radius: 12px !important;
+            z-index: 2147483647 !important;
+            font-size: 14px !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+            max-width: 450px !important;
+            text-align: center !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+        }
+        .ulegacy-guide-tooltip .step-number {
+            display: inline-block;
+            background: #4a00e0;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-right: 8px;
+            text-align: center;
+        }
+        .ulegacy-guide-tooltip .step-text {
+            font-weight: 400;
+        }
+        .ulegacy-guide-tooltip .step-next {
+            display: inline-block;
+            margin-top: 12px;
+            background: #4a00e0;
+            border: none;
+            color: white;
+            padding: 6px 20px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        .ulegacy-guide-tooltip .step-next:hover {
+            background: #3a00b0;
+        }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+}
+
 function showTooltip(instruction, onNext) {
     // Remove existing tooltip
     const existing = document.querySelector('.ulegacy-guide-tooltip');
     if (existing) existing.remove();
+
+    // Ensure CSS styles are injected
+    injectTooltipStyles();
 
     const tooltip = document.createElement('div');
     tooltip.className = 'ulegacy-guide-tooltip';

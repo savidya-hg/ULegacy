@@ -72,6 +72,95 @@ function applyBlur() {
         return;
     }
 
+    // Inject blur, highlight, and tooltip styles immediately so they are available
+    // even on skipped subdomains/paths.
+    if (!document.getElementById('ulegacy-shield-styles')) {
+        const style = document.createElement('style');
+        style.id = 'ulegacy-shield-styles';
+        style.textContent = `
+            .ulegacy-blur {
+                filter: blur(25px) !important;
+                pointer-events: none !important;
+                user-select: none !important;
+                -webkit-user-select: none !important;
+                opacity: 0.7 !important;
+                transition: filter 0.1s ease !important;
+            }
+            .ulegacy-guide-highlight {
+                outline: 4px solid #ff6b6b !important;
+                outline-offset: 3px !important;
+                background: rgba(255, 243, 205, 0.3) !important;
+                border-radius: 4px !important;
+                transition: outline 0.3s ease !important;
+                position: relative !important;
+                z-index: 2147483646 !important;
+            }
+            .ulegacy-guide-tooltip {
+                position: fixed !important;
+                top: 20px !important;
+                left: 50% !important;
+                transform: translateX(-50%) !important;
+                background: #1a1a2e !important;
+                color: white !important;
+                padding: 16px 24px !important;
+                border-radius: 12px !important;
+                z-index: 2147483647 !important;
+                font-size: 14px !important;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+                max-width: 450px !important;
+                text-align: center !important;
+                border: 1px solid rgba(255,255,255,0.2) !important;
+            }
+            .ulegacy-guide-tooltip .step-number {
+                display: inline-block;
+                background: #4a00e0;
+                border-radius: 50%;
+                width: 24px;
+                height: 24px;
+                line-height: 24px;
+                font-size: 12px;
+                font-weight: 700;
+                margin-right: 8px;
+                text-align: center;
+            }
+            .ulegacy-guide-tooltip .step-text {
+                font-weight: 400;
+            }
+            .ulegacy-guide-tooltip .step-next {
+                display: inline-block;
+                margin-top: 12px;
+                background: #4a00e0;
+                border: none;
+                color: white;
+                padding: 6px 20px;
+                border-radius: 6px;
+                font-size: 13px;
+                cursor: pointer;
+                font-weight: 500;
+                transition: background 0.2s;
+            }
+            .ulegacy-guide-tooltip .step-next:hover {
+                background: #3a00b0;
+            }
+            #ulegacy-page-block {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                background: rgba(26, 26, 46, 0.95) !important;
+                z-index: 999999 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                flex-direction: column !important;
+                font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
     // Skip blurring/blocking on pages the beneficiary needs to interact with
     const pathname = window.location.pathname.toLowerCase();
     const SAFE_PATHS = [
@@ -109,91 +198,6 @@ function applyBlur() {
         applyFullPageBlock('Unrecognized platform — page blocked for privacy protection.');
         return;
     }
-
-    // Inject blur styles
-    const style = document.createElement('style');
-    style.id = 'ulegacy-shield-styles';
-    style.textContent = `
-        .ulegacy-blur {
-            filter: blur(25px) !important;
-            pointer-events: none !important;
-            user-select: none !important;
-            -webkit-user-select: none !important;
-            opacity: 0.7 !important;
-            transition: filter 0.1s ease !important;
-        }
-        .ulegacy-guide-highlight {
-            outline: 3px solid #ff6b6b !important;
-            outline-offset: 2px !important;
-            background: #fff3cd !important;
-            border-radius: 4px !important;
-            transition: outline 0.3s ease !important;
-            position: relative !important;
-            z-index: 9999 !important;
-        }
-        .ulegacy-guide-tooltip {
-            position: fixed !important;
-            top: 20px !important;
-            left: 50% !important;
-            transform: translateX(-50%) !important;
-            background: #1a1a2e !important;
-            color: white !important;
-            padding: 16px 24px !important;
-            border-radius: 12px !important;
-            z-index: 99999 !important;
-            font-size: 14px !important;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4) !important;
-            max-width: 400px !important;
-            text-align: center !important;
-            border: 1px solid rgba(255,255,255,0.1) !important;
-        }
-        .ulegacy-guide-tooltip .step-number {
-            display: inline-block;
-            background: #4a00e0;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            line-height: 24px;
-            font-size: 12px;
-            font-weight: 700;
-            margin-right: 8px;
-        }
-        .ulegacy-guide-tooltip .step-text {
-            font-weight: 400;
-        }
-        .ulegacy-guide-tooltip .step-next {
-            display: inline-block;
-            margin-top: 12px;
-            background: #4a00e0;
-            border: none;
-            color: white;
-            padding: 6px 20px;
-            border-radius: 6px;
-            font-size: 13px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: background 0.2s;
-        }
-        .ulegacy-guide-tooltip .step-next:hover {
-            background: #3a00b0;
-        }
-        #ulegacy-page-block {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            background: rgba(26, 26, 46, 0.95) !important;
-            z-index: 999999 !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            flex-direction: column !important;
-            font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
-        }
-    `;
-    document.head.appendChild(style);
 
     // Apply blur to sensitive elements for this platform
     const selectors = SENSITIVE_SELECTORS[matchedHost] || [];
