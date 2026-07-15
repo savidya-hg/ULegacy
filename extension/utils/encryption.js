@@ -1,4 +1,4 @@
-// Web Crypto API wrapper for AES-256-GCM
+// encryption.js - Shared encryption utilities
 
 async function deriveKey(recoveryKey, salt = 'ulegacy_salt') {
     const encoder = new TextEncoder();
@@ -50,7 +50,6 @@ async function decryptData(encryptedObj, recoveryKey) {
     return JSON.parse(new TextDecoder().decode(decrypted));
 }
 
-// Hash recovery key for server (simplified – use Argon2 on backend)
 async function hashKeyForServer(recoveryKey) {
     const encoder = new TextEncoder();
     const data = encoder.encode(recoveryKey + 'ulegacy_salt');

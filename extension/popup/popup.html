@@ -1,15 +1,28 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ULegacy</title>
     <link rel="stylesheet" href="popup.css">
 </head>
+
 <body>
     <div class="container">
-        <!-- Header with role selector -->
+        <!-- Header -->
         <div class="header">
-            <h2>ULegacy</h2>
+            <div class="logo">
+                <span class="logo-icon">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round" style="color: #4a00e0;">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        <path d="M12 8v4" />
+                        <path d="M12 16h.01" />
+                    </svg>
+                </span>
+                <span class="logo-text">ULegacy</span>
+            </div>
             <div class="role-selector">
                 <select id="roleSelect">
                     <option value="owner">Owner</option>
@@ -26,55 +39,165 @@
 
         <!-- Owner Dashboard -->
         <div id="ownerDashboard" class="dashboard">
-            <div class="section">
-                <h3>Your Accounts</h3>
-                <div id="accountList"></div>
-                <button id="addAccountBtn" class="btn btn-secondary">+ Add Account</button>
-                <div id="addAccountForm" class="hidden">
-                    <select id="platformSelect">
-                        <option value="facebook">Facebook</option>
-                        <option value="google">Google</option>
-                        <option value="instagram">Instagram</option>
-                    </select>
-                    <input type="text" id="usernameInput" placeholder="Username/Email">
-                    <input type="password" id="passwordInput" placeholder="Password">
-                    <button id="saveAccountBtn" class="btn btn-primary">Save</button>
-                    <button id="cancelAddBtn" class="btn btn-secondary">Cancel</button>
+            <div id="registrationSection" class="section">
+                <h3>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display:inline-block; vertical-align:middle; margin-right:4px;">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="8.5" cy="7" r="4" />
+                        <line x1="20" y1="8" x2="20" y2="14" />
+                        <line x1="23" y1="11" x2="17" y2="11" />
+                    </svg>
+                    <span style="vertical-align:middle;">Owner Registration</span>
+                </h3>
+                <div class="form-row" id="registrationFormRow">
+                    <input type="email" id="ownerEmailInput" placeholder="your-email@email.com" class="input-sm"
+                        style="flex: 1;">
+                    <button id="registerOwnerBtn" class="btn btn-primary btn-sm">Register</button>
+                </div>
+                <div id="registrationStatusText" class="hidden">
+                    <div id="registeredDisplayRow" style="display:flex; align-items:center; gap:6px; margin-top:4px;">
+                        <span style="color: #28a745; font-weight: 500; font-size: 12px;">✓ Registered:</span>
+                        <span id="registeredEmailDisplay" style="font-weight: 600; font-size: 12px; flex:1;"></span>
+                        <button id="editEmailBtn" class="btn btn-secondary btn-sm"
+                            style="padding:2px 8px; font-size:10px;">Edit</button>
+                    </div>
+                    <div id="editEmailRow" class="hidden form-row" style="margin-top:6px;">
+                        <input type="email" id="editEmailInput" placeholder="new-email@email.com" class="input-sm"
+                            style="flex:1;">
+                        <button id="saveEmailBtn" class="btn btn-primary btn-sm" style="padding:2px 8px;">Save</button>
+                        <button id="cancelEditEmailBtn" class="btn btn-secondary btn-sm"
+                            style="padding:2px 8px;">Cancel</button>
+                    </div>
+                    <p id="registrationStatusMessage" class="status-message"></p>
                 </div>
             </div>
 
             <div class="section">
-                <h3>Beneficiary</h3>
-                <input type="email" id="beneficiaryEmail" placeholder="beneficiary@email.com">
-                <button id="saveBeneficiaryBtn" class="btn btn-primary">Save</button>
+                <div class="section-header">
+                    <h3>Your Accounts</h3>
+                    <span class="account-count" id="accountCount">0</span>
+                </div>
+                <div id="accountList"></div>
+                <button id="addAccountBtn" class="btn btn-secondary btn-sm">+ Add Account</button>
+                <div id="addAccountForm" class="hidden form-inline">
+                    <select id="platformSelect">
+                        <option value="facebook">Facebook</option>
+                        <option value="google">Google</option>
+                        <option value="instagram">Instagram</option>
+                        <option value="tiktok">TikTok</option>
+                    </select>
+                    <input type="text" id="usernameInput" placeholder="Username/Email" class="input-sm">
+                    <input type="password" id="passwordInput" placeholder="Password" class="input-sm">
+                    <div class="form-actions">
+                        <button id="saveAccountBtn" class="btn btn-primary btn-sm">Save</button>
+                        <button id="cancelAddBtn" class="btn btn-secondary btn-sm">Cancel</button>
+                    </div>
+                </div>
+                <p id="accountsStatusMessage" class="status-message"></p>
+            </div>
+
+            <div class="section">
+                <h3>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display:inline-block; vertical-align:middle; margin-right:4px;">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    <span style="vertical-align:middle;">Beneficiary</span>
+                </h3>
+                <div class="form-row">
+                    <input type="email" id="beneficiaryEmail" placeholder="Beneficiary@email.com" class="input-sm">
+                    <button id="saveBeneficiaryBtn" class="btn btn-primary btn-sm">Save</button>
+                </div>
+                <p id="beneficiaryStatusMessage" class="status-message"></p>
             </div>
 
             <div class="section">
                 <h3>Recovery Key</h3>
                 <div class="key-row">
-                    <span id="recoveryKeyDisplay">Not set</span>
-                    <button id="copyKeyBtn" class="btn btn-icon" title="Copy key"><ion-icon name="copy-outline"></ion-icon></button>
+                    <span id="recoveryKeyDisplay" class="key-text">Not set</span>
+                    <button id="copyKeyBtn" class="btn btn-icon" title="Copy key">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #6c757d;">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                    </button>
                 </div>
-                <button id="generateKeyBtn" class="btn btn-secondary">Generate New Key</button>
+                <button id="generateKeyBtn" class="btn btn-secondary btn-sm">Generate New Key</button>
+                <p id="recoveryKeyStatusMessage" class="status-message"></p>
+                <div class="key-warning">
+                    Share this key with your Beneficiary. They will need it to claim your assets. Cannot be recovered if
+                    lost.
+                </div>
             </div>
 
             <div class="section">
-                <button id="resetTimerBtn" class="btn btn-danger">Reset Timer</button>
-                <p id="statusMessage"></p>
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                    <span id="monitoringIndicator"
+                        style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#28a745; animation: pulse-dot 2s ease-in-out infinite;"></span>
+                    <span style="font-size:12px; color:#2d3748; font-weight:500;">Passive Monitoring Active</span>
+                </div>
+                <p style="font-size:11px; color:#6c757d; margin:0 0 8px;">Your browser activity is automatically
+                    detected. No manual action needed.</p>
+                <button id="resetTimerBtn" class="btn btn-success btn-full">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display:inline-block; vertical-align:middle; margin-right:4px;">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <span style="vertical-align:middle;">Force Reset Timer</span>
+                </button>
+                <p id="statusMessage" class="status-message"></p>
+            </div>
+
+            <div class="section">
+                <div style="display:flex; gap:6px;">
+                    <button id="testTriggerBtn" class="btn btn-danger"
+                        style="flex:1; font-size:11px; padding:6px 8px;">Test: Grace Period</button>
+                    <button id="testSettlementBtn" class="btn btn-danger"
+                        style="flex:1; font-size:11px; padding:6px 8px;">Test: Final Settlement</button>
+                </div>
+                <p id="simulationStatusMessage" class="status-message"></p>
             </div>
         </div>
 
         <!-- Beneficiary Dashboard -->
         <div id="beneficiaryDashboard" class="dashboard hidden">
             <div class="section">
-                <h3>Settlement Portal</h3>
-                <p>Enter the recovery key provided by the owner:</p>
-                <input type="password" id="beneficiaryKeyInput" placeholder="Recovery Key">
-                <button id="beneficiaryVerifyBtn" class="btn btn-primary">Verify & Load</button>
+                <h3>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="display:inline-block; vertical-align:middle; margin-right:4px;">
+                        <path
+                            d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7H1.5M12 2v20M21 6l-3 1m0 0l3 9a5.002 5.002 0 01-6.001 0M18 7l-3 9M18 7H22.5" />
+                    </svg>
+                    <span style="vertical-align:middle;">Settlement Portal</span>
+                </h3>
+                <p class="help-text">Enter the recovery key provided by the owner:</p>
+                <input type="password" id="beneficiaryKeyInput" placeholder="Recovery Key" class="input-full">
+                <input type="text" id="beneficiaryUserIdInput" placeholder="User ID from email" class="input-full">
+                <button id="beneficiaryVerifyBtn" class="btn btn-primary btn-full">Verify & Load</button>
+                <p id="verifyStatusMessage" class="status-message"></p>
                 <div id="settlementAccounts" class="settlement-list"></div>
+                <p id="settlementCompleteStatusMessage" class="status-message"></p>
             </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <span class="version">v1.0.0</span>
+            <span class="status-dot" id="connectionStatus">●</span>
         </div>
     </div>
     <script type="module" src="popup.js"></script>
 </body>
+
 </html>

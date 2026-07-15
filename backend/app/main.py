@@ -1,202 +1,309 @@
-from fastapi import FastAPI, HTTPException, Depends
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional
 from datetime import datetime, timedelta
-import os
-from dotenv import load_dotenv
-from supabase import create_client, Client
-import argon2
-import secrets
 
-load_dotenv()
+# Import database helpers
+from .database import supabase, hash_recovery_key, verify_recovery_key, generate_settlement_token
 
-app = FastAPI(title="ULegacy API")
+# Import models (single source of truth)
+from .models import UserRegisterRequest, UserResponse, SimulateInactivityRequest, UpdateBeneficiaryRequest, UpdateRecoveryKeyRequest
 
-# CORS for extension
+# Import routers
+from .routes import heartbeat, settlement, vault
+
+# Import services
+from .services.notifications import (
+    send_grace_period_email,
+    send_beneficiary_grace_email, send_settlement_instructions_email
+)
+from .services.scheduler import check_inactive_users
+
+# Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ulegacy")
+
+# ---------- Background Scheduler ----------
+async def _scheduler_loop():
+    """Run the inactivity check every 24 hours"""
+    while True:
+        try:
+            logger.info("Running scheduled inactivity check...")
+            result = await check_inactive_users()
+            logger.info(f"Inactivity check complete: {result}")
+        except Exception as e:
+            logger.error(f"Scheduler error: {e}")
+        # Wait 24 hours before next check
+        await asyncio.sleep(86400)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown lifecycle"""
+    # Startup: launch background scheduler
+    task = asyncio.create_task(_scheduler_loop())
+    logger.info("ULegacy background scheduler started (24h cycle)")
+    yield
+    # Shutdown: cancel scheduler
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    logger.info("ULegacy scheduler stopped")
+
+app = FastAPI(
+    title="ULegacy API",
+    description="Post Mortem Data Management System",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restrict in production
+    allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Supabase client
-supabase: Client = create_client(
-    os.getenv("SUPABASE_URL"),
-    os.getenv("SUPABASE_KEY")
-)
+# ---------- Include Routers ----------
+app.include_router(heartbeat.router)
+app.include_router(settlement.router)
+app.include_router(vault.router)
 
-# ---------- Pydantic Models ----------
-class HeartbeatRequest(BaseModel):
-    user_id: str
-
-class VaultSaveRequest(BaseModel):
-    user_id: str
-    encrypted_data: str
-    platform_metadata: dict
-
-class VerifyRequest(BaseModel):
-    user_id: str
-    recovery_key: str
-
-class SettlementTriggerRequest(BaseModel):
-    user_id: str
-
-# ---------- Helper Functions ----------
-ph = argon2.PasswordHasher()
-
-def hash_recovery_key(key: str, salt: str = None) -> tuple:
-    if not salt:
-        salt = secrets.token_hex(16)
-    hash = ph.hash(f"{key}{salt}")
-    return hash, salt
-
-def verify_recovery_key(key: str, hash: str, salt: str) -> bool:
-    try:
-        ph.verify(hash, f"{key}{salt}")
-        return True
-    except:
-        return False
-
-# ---------- Endpoints ----------
-@app.post("/api/heartbeat")
-async def heartbeat(req: HeartbeatRequest):
-    # Update last_heartbeat and reset status if in grace period
-    user = supabase.table("users").select("*").eq("id", req.user_id).execute()
-    if not user.data:
-        raise HTTPException(404, "User not found")
-    
-    user_data = user.data[0]
-    new_status = "active"
-    if user_data["status"] == "grace_period":
-        new_status = "active"
-    
-    supabase.table("users").update({
-        "last_heartbeat": datetime.utcnow().isoformat(),
-        "status": new_status,
-        "grace_period_start": None
-    }).eq("id", req.user_id).execute()
-    
-    # Log
-    supabase.table("audit_logs").insert({
-        "user_id": req.user_id,
-        "action": "heartbeat",
-        "metadata": {"status": new_status}
-    }).execute()
-    
-    return {"status": "ok"}
-
-@app.post("/api/vault/save")
-async def save_vault(req: VaultSaveRequest):
-    # Check if user exists
-    user = supabase.table("users").select("id").eq("id", req.user_id).execute()
-    if not user.data:
-        raise HTTPException(404, "User not found")
-    
-    # Check if vault exists, update or insert
-    existing = supabase.table("vaults").select("id").eq("user_id", req.user_id).execute()
+# ---------- User Endpoints ----------
+@app.post("/api/users/register")
+async def register_user(req: UserRegisterRequest):
+    existing = supabase.table("users").select("id").eq("email", req.email).execute()
     if existing.data:
-        supabase.table("vaults").update({
-            "encrypted_data": req.encrypted_data,
-            "platform_metadata": req.platform_metadata
-        }).eq("user_id", req.user_id).execute()
-    else:
-        supabase.table("vaults").insert({
-            "user_id": req.user_id,
-            "encrypted_data": req.encrypted_data,
-            "platform_metadata": req.platform_metadata
-        }).execute()
-    
-    return {"status": "saved"}
+        raise HTTPException(400, "User already exists")
 
-@app.get("/api/vault/{user_id}")
-async def get_vault(user_id: str):
-    vault = supabase.table("vaults").select("encrypted_data").eq("user_id", user_id).execute()
-    if not vault.data:
-        raise HTTPException(404, "Vault not found")
-    return {"encrypted_data": vault.data[0]["encrypted_data"]}
+    # The client sends SHA-256(raw_key) — we never see the raw key
+    hash_value, salt = hash_recovery_key(req.recovery_key_hash)
+    user_data = {
+        "email": req.email,
+        "recovery_key_hash": hash_value,
+        "salt": salt,
+        "beneficiary_email": req.beneficiary_email,
+        "status": "active",
+        "last_heartbeat": datetime.utcnow().isoformat()
+    }
 
-@app.post("/api/settlement/verify")
-async def verify_recovery(req: VerifyRequest):
+    result = supabase.table("users").insert(user_data).execute()
+    if not result.data:
+        raise HTTPException(500, "Failed to create user")
+
+    user = result.data[0]
+    supabase.table("audit_logs").insert({
+        "user_id": user["id"],
+        "action": "user_registered",
+        "metadata": {"email": req.email}
+    }).execute()
+
+    logger.info(f"User registered: {req.email}")
+
+    return UserResponse(
+        id=user["id"],
+        email=user["email"],
+        status=user["status"],
+        last_heartbeat=user["last_heartbeat"],
+        created_at=user["created_at"],
+        beneficiary_email=user.get("beneficiary_email")
+    )
+
+@app.get("/api/users/{user_id}")
+async def get_user(user_id: str):
+    result = supabase.table("users").select("*").eq("id", user_id).execute()
+    if not result.data:
+        raise HTTPException(404, "User not found")
+    user = result.data[0]
+    return UserResponse(
+        id=user["id"],
+        email=user["email"],
+        status=user["status"],
+        last_heartbeat=user["last_heartbeat"],
+        created_at=user["created_at"],
+        beneficiary_email=user.get("beneficiary_email")
+    )
+
+@app.patch("/api/users/beneficiary")
+async def update_beneficiary(req: UpdateBeneficiaryRequest):
     user = supabase.table("users").select("*").eq("id", req.user_id).execute()
     if not user.data:
         raise HTTPException(404, "User not found")
-    user_data = user.data[0]
-    
-    if not verify_recovery_key(req.recovery_key, user_data["recovery_key_hash"], user_data["salt"]):
-        raise HTTPException(401, "Invalid recovery key")
-    
-    # Generate settlement token
-    token = secrets.token_urlsafe(32)
+
     supabase.table("users").update({
-        "settlement_token": token,
-        "status": "deceased"
+        "beneficiary_email": req.beneficiary_email
     }).eq("id", req.user_id).execute()
-    
-    # Log
+
     supabase.table("audit_logs").insert({
         "user_id": req.user_id,
-        "action": "settlement_verified",
-        "metadata": {"token_generated": True}
+        "action": "beneficiary_updated",
+        "metadata": {"beneficiary_email": req.beneficiary_email}
     }).execute()
-    
-    return {"settlement_token": token}
 
-@app.post("/api/settlement/complete")
-async def complete_settlement(req: SettlementTriggerRequest):
-    # Mark all accounts as deleted – in practice you'd update platform status
-    # Here we just log and clean up
+    return {"status": "updated", "beneficiary_email": req.beneficiary_email}
+
+@app.patch("/api/users/recovery-key")
+async def update_recovery_key(req: UpdateRecoveryKeyRequest):
+    user = supabase.table("users").select("*").eq("id", req.user_id).execute()
+    if not user.data:
+        raise HTTPException(404, "User not found")
+
+    # Hash the new SHA-256 key hash with a new random salt on the server using Argon2id
+    hash_value, salt = hash_recovery_key(req.recovery_key_hash)
+
     supabase.table("users").update({
-        "status": "settled"
+        "recovery_key_hash": hash_value,
+        "salt": salt
     }).eq("id", req.user_id).execute()
-    
-    # Optionally delete vault
-    supabase.table("vaults").delete().eq("user_id", req.user_id).execute()
-    
+
     supabase.table("audit_logs").insert({
         "user_id": req.user_id,
-        "action": "settlement_complete"
+        "action": "recovery_key_updated",
+        "metadata": {"triggered_by": "owner"}
     }).execute()
-    
-    return {"status": "complete"}
 
-# ---------- Scheduler (simplified: runs on startup) ----------
-@app.on_event("startup")
-async def startup_event():
-    # This would be a cron job in production
-    # For now, we'll just run a check manually via endpoint
-    pass
+    return {"status": "updated"}
 
+# ---------- Admin Endpoints ----------
 @app.get("/api/admin/check-inactive")
-async def check_inactive():
-    # Find users with no heartbeat for 30 days
+async def check_inactive(background_tasks: BackgroundTasks):
+    """Manually trigger the inactivity check (also runs automatically every 24h)"""
     cutoff = (datetime.utcnow() - timedelta(days=30)).isoformat()
     inactive = supabase.table("users").select("*").eq("status", "active").lt("last_heartbeat", cutoff).execute()
-    
+
+    results = {"inactive_users": [], "expired_grace": [], "settlement_triggered": []}
+
     for user in inactive.data:
-        # Move to grace period
+        # Generate a confirmation token for grace period
+        grace_token = generate_settlement_token()
+
         supabase.table("users").update({
             "status": "grace_period",
-            "grace_period_start": datetime.utcnow().isoformat()
+            "grace_period_start": datetime.utcnow().isoformat(),
+            "settlement_token": grace_token
         }).eq("id", user["id"]).execute()
-        
-        # Send notifications (placeholder)
-        print(f"GRACE PERIOD STARTED for {user['email']}")
-    
-    # Check expired grace periods (7 days)
+        results["inactive_users"].append(user["email"])
+
+        # Send grace period email to OWNER in background
+        reset_link = f"http://localhost:8000/api/settlement/confirm-active/{user['id']}/{grace_token}"
+        background_tasks.add_task(send_grace_period_email, user["email"], reset_link)
+
+        # Send grace period email to BENEFICIARY in background (if set)
+        if user.get("beneficiary_email"):
+            background_tasks.add_task(
+                send_beneficiary_grace_email,
+                user["beneficiary_email"],
+                user["email"],
+                user["id"],
+                grace_token
+            )
+
+        supabase.table("audit_logs").insert({
+            "user_id": user["id"],
+            "action": "grace_period_started",
+            "metadata": {
+                "owner_email_queued": True,
+                "beneficiary_email_queued": bool(user.get("beneficiary_email"))
+            }
+        }).execute()
+
     grace_cutoff = (datetime.utcnow() - timedelta(days=7)).isoformat()
     expired = supabase.table("users").select("*").eq("status", "grace_period").lt("grace_period_start", grace_cutoff).execute()
-    
+
     for user in expired.data:
-        # Mark deceased and generate token
-        token = secrets.token_urlsafe(32)
+        token = generate_settlement_token()
         supabase.table("users").update({
             "status": "deceased",
             "settlement_token": token
         }).eq("id", user["id"]).execute()
-        
-        # Send settlement email (placeholder)
-        print(f"SETTLEMENT TRIGGERED for {user['email']} token: {token}")
+        results["expired_grace"].append(user["email"])
+        results["settlement_triggered"].append(user["email"])
+
+        # Send settlement instructions email to beneficiary in background
+        recipient = user.get("beneficiary_email") or user["email"]
+        background_tasks.add_task(send_settlement_instructions_email, recipient, user["id"])
+
+        supabase.table("audit_logs").insert({
+            "user_id": user["id"],
+            "action": "settlement_triggered",
+            "metadata": {
+                "token_generated": True,
+                "beneficiary_notified": recipient,
+                "email_queued": True
+            }
+        }).execute()
+
+    return results
+
+@app.post("/api/admin/simulate-inactivity")
+async def simulate_inactivity(req: SimulateInactivityRequest):
+    """Set a user's last_heartbeat to 31 days ago to test the dead man's switch"""
+    user = supabase.table("users").select("id, email").eq("id", req.user_id).execute()
+    if not user.data:
+        raise HTTPException(404, "User not found")
+
+    if req.date:
+        old_date = req.date
+    else:
+        old_date = (datetime.utcnow() - timedelta(days=31)).isoformat()
+
+    supabase.table("users").update({
+        "last_heartbeat": old_date
+    }).eq("id", req.user_id).execute()
+
+    supabase.table("audit_logs").insert({
+        "user_id": req.user_id,
+        "action": "simulate_inactivity",
+        "metadata": {"simulated_date": old_date}
+    }).execute()
+
+    logger.info(f"Simulated inactivity for user {req.user_id}")
+
+    return {"status": "simulated", "last_heartbeat": old_date}
+
+@app.post("/api/admin/simulate-settlement")
+async def simulate_settlement(req: SimulateInactivityRequest, background_tasks: BackgroundTasks):
+    """Jump a user directly to 'deceased' (final settlement) status for testing.
     
-    return {"inactive": len(inactive.data), "expired": len(expired.data)}
+    Skips the 30-day inactivity and 7-day grace period entirely.
+    Generates a settlement token so the beneficiary can verify and begin deletion.
+    """
+    user = supabase.table("users").select("id, email, beneficiary_email").eq("id", req.user_id).execute()
+    if not user.data:
+        raise HTTPException(404, "User not found")
+
+    user_data = user.data[0]
+    token = generate_settlement_token()
+    supabase.table("users").update({
+        "status": "deceased",
+        "settlement_token": token,
+        "grace_period_start": None
+    }).eq("id", req.user_id).execute()
+
+    # Queue settlement instructions email in the background
+    recipient = user_data.get("beneficiary_email") or user_data["email"]
+    background_tasks.add_task(send_settlement_instructions_email, recipient, req.user_id)
+
+    supabase.table("audit_logs").insert({
+        "user_id": req.user_id,
+        "action": "simulate_settlement",
+        "metadata": {
+            "token_generated": True,
+            "simulated": True,
+            "beneficiary_notified": recipient,
+            "emails_queued": True
+        }
+    }).execute()
+
+    logger.info(f"Simulated final settlement for user {req.user_id}")
+
+    return {"status": "deceased", "settlement_token": token}
+
+@app.get("/")
+async def root():
+    return {"message": "ULegacy API", "status": "running"}
