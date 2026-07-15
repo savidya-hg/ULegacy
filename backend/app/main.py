@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from .database import supabase, hash_recovery_key, verify_recovery_key, generate_settlement_token
 
 # Import models (single source of truth)
-from .models import UserRegisterRequest, UserResponse, SimulateInactivityRequest, UpdateBeneficiaryRequest
+from .models import UserRegisterRequest, UserResponse, SimulateInactivityRequest, UpdateBeneficiaryRequest, UpdateRecoveryKeyRequest
 
 # Import routers
 from .routes import heartbeat, settlement, vault
@@ -146,6 +146,28 @@ async def update_beneficiary(req: UpdateBeneficiaryRequest):
     }).execute()
 
     return {"status": "updated", "beneficiary_email": req.beneficiary_email}
+
+@app.patch("/api/users/recovery-key")
+async def update_recovery_key(req: UpdateRecoveryKeyRequest):
+    user = supabase.table("users").select("*").eq("id", req.user_id).execute()
+    if not user.data:
+        raise HTTPException(404, "User not found")
+
+    # Hash the new SHA-256 key hash with a new random salt on the server using Argon2id
+    hash_value, salt = hash_recovery_key(req.recovery_key_hash)
+
+    supabase.table("users").update({
+        "recovery_key_hash": hash_value,
+        "salt": salt
+    }).eq("id", req.user_id).execute()
+
+    supabase.table("audit_logs").insert({
+        "user_id": req.user_id,
+        "action": "recovery_key_updated",
+        "metadata": {"triggered_by": "owner"}
+    }).execute()
+
+    return {"status": "updated"}
 
 # ---------- Admin Endpoints ----------
 @app.get("/api/admin/check-inactive")

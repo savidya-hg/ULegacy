@@ -48,3 +48,7 @@ class UpdateEmailRequest(BaseModel):
 class UpdateBeneficiaryRequest(BaseModel):
     user_id: str
     beneficiary_email: EmailStr
+
+class UpdateRecoveryKeyRequest(BaseModel):
+    user_id: str
+    recovery_key_hash: str

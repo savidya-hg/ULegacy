@@ -425,12 +425,35 @@ document.getElementById('saveBeneficiaryBtn').addEventListener('click', async ()
 
 // Generate Recovery Key
 document.getElementById('generateKeyBtn').addEventListener('click', async () => {
+    if (recoveryKey && !confirm('Are you sure you want to generate a new Recovery Key? This will overwrite your existing key and re-encrypt your vault. You must save the new key safely.')) {
+        return;
+    }
+
     const array = new Uint8Array(32);
     crypto.getRandomValues(array);
-    recoveryKey = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
+    const newKey = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    // Hash the recovery key client-side before sending
+    const keyHash = await hashKeyForServer(newKey);
+
+    // If registered, update it on the server first
+    if (userId && isRegistered) {
+        try {
+            await callApi('/api/users/recovery-key', 'PATCH', {
+                user_id: userId,
+                recovery_key_hash: keyHash
+            });
+            console.log('Recovery key hash updated on server');
+        } catch (e) {
+            showStatus('Failed to update Recovery Key on server: ' + e.message, 'error');
+            return;
+        }
+    }
+
+    recoveryKey = newKey;
     await chrome.storage.local.set({ recoveryKey });
     document.getElementById('recoveryKeyDisplay').textContent = recoveryKey;
-    showStatus('New Recovery Key generated! Save it securely.', 'success');
+    showStatus('New Recovery Key generated and updated on server!', 'success');
     await saveVaultLocal();
 });
 
