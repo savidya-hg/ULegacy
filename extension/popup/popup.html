@@ -52,20 +52,25 @@
                     <span style="vertical-align:middle;">Owner Registration</span>
                 </h3>
                 <div class="form-row" id="registrationFormRow">
-                    <input type="email" id="ownerEmailInput" placeholder="your-email@email.com" class="input-sm" style="flex: 1;">
+                    <input type="email" id="ownerEmailInput" placeholder="your-email@email.com" class="input-sm"
+                        style="flex: 1;">
                     <button id="registerOwnerBtn" class="btn btn-primary btn-sm">Register</button>
                 </div>
                 <div id="registrationStatusText" class="hidden">
                     <div id="registeredDisplayRow" style="display:flex; align-items:center; gap:6px; margin-top:4px;">
                         <span style="color: #28a745; font-weight: 500; font-size: 12px;">✓ Registered:</span>
                         <span id="registeredEmailDisplay" style="font-weight: 600; font-size: 12px; flex:1;"></span>
-                        <button id="editEmailBtn" class="btn btn-secondary btn-sm" style="padding:2px 8px; font-size:10px;">Edit</button>
+                        <button id="editEmailBtn" class="btn btn-secondary btn-sm"
+                            style="padding:2px 8px; font-size:10px;">Edit</button>
                     </div>
                     <div id="editEmailRow" class="hidden form-row" style="margin-top:6px;">
-                        <input type="email" id="editEmailInput" placeholder="new-email@email.com" class="input-sm" style="flex:1;">
+                        <input type="email" id="editEmailInput" placeholder="new-email@email.com" class="input-sm"
+                            style="flex:1;">
                         <button id="saveEmailBtn" class="btn btn-primary btn-sm" style="padding:2px 8px;">Save</button>
-                        <button id="cancelEditEmailBtn" class="btn btn-secondary btn-sm" style="padding:2px 8px;">Cancel</button>
+                        <button id="cancelEditEmailBtn" class="btn btn-secondary btn-sm"
+                            style="padding:2px 8px;">Cancel</button>
                     </div>
+                    <p id="registrationStatusMessage" class="status-message"></p>
                 </div>
             </div>
 
@@ -90,6 +95,7 @@
                         <button id="cancelAddBtn" class="btn btn-secondary btn-sm">Cancel</button>
                     </div>
                 </div>
+                <p id="accountsStatusMessage" class="status-message"></p>
             </div>
 
             <div class="section">
@@ -108,6 +114,7 @@
                     <input type="email" id="beneficiaryEmail" placeholder="Beneficiary@email.com" class="input-sm">
                     <button id="saveBeneficiaryBtn" class="btn btn-primary btn-sm">Save</button>
                 </div>
+                <p id="beneficiaryStatusMessage" class="status-message"></p>
             </div>
 
             <div class="section">
@@ -123,17 +130,21 @@
                     </button>
                 </div>
                 <button id="generateKeyBtn" class="btn btn-secondary btn-sm">Generate New Key</button>
+                <p id="recoveryKeyStatusMessage" class="status-message"></p>
                 <div class="key-warning">
-                    Save this key securely. It cannot be recovered if lost.
+                    Share this key with your Beneficiary. They will need it to claim your assets. Cannot be recovered if
+                    lost.
                 </div>
             </div>
 
             <div class="section">
                 <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
-                    <span id="monitoringIndicator" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#28a745; animation: pulse-dot 2s ease-in-out infinite;"></span>
+                    <span id="monitoringIndicator"
+                        style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#28a745; animation: pulse-dot 2s ease-in-out infinite;"></span>
                     <span style="font-size:12px; color:#2d3748; font-weight:500;">Passive Monitoring Active</span>
                 </div>
-                <p style="font-size:11px; color:#6c757d; margin:0 0 8px;">Your browser activity is automatically detected. No manual action needed.</p>
+                <p style="font-size:11px; color:#6c757d; margin:0 0 8px;">Your browser activity is automatically
+                    detected. No manual action needed.</p>
                 <button id="resetTimerBtn" class="btn btn-success btn-full">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round"
@@ -148,9 +159,12 @@
 
             <div class="section">
                 <div style="display:flex; gap:6px;">
-                    <button id="testTriggerBtn" class="btn btn-danger" style="flex:1; font-size:11px; padding:6px 8px;">Test: Grace Period</button>
-                    <button id="testSettlementBtn" class="btn btn-danger" style="flex:1; font-size:11px; padding:6px 8px;">Test: Final Settlement</button>
+                    <button id="testTriggerBtn" class="btn btn-danger"
+                        style="flex:1; font-size:11px; padding:6px 8px;">Test: Grace Period</button>
+                    <button id="testSettlementBtn" class="btn btn-danger"
+                        style="flex:1; font-size:11px; padding:6px 8px;">Test: Final Settlement</button>
                 </div>
+                <p id="simulationStatusMessage" class="status-message"></p>
             </div>
         </div>
 
@@ -170,7 +184,10 @@
                 <input type="password" id="beneficiaryKeyInput" placeholder="Recovery Key" class="input-full">
                 <input type="text" id="beneficiaryUserIdInput" placeholder="User ID from email" class="input-full">
                 <button id="beneficiaryVerifyBtn" class="btn btn-primary btn-full">Verify & Load</button>
+                <p id="verifyStatusMessage" class="status-message"></p>
                 <div id="settlementAccounts" class="settlement-list"></div>
+                <p id="settlementCompleteStatusMessage" class="status-message"></p>
+            </div>
             </div>
         </div>
 

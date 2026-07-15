@@ -134,6 +134,13 @@ const beneficiaryDash = document.getElementById('beneficiaryDashboard');
 const statusBadge = document.getElementById('statusBadge');
 const lastCheckEl = document.getElementById('lastCheck');
 const statusMessage = document.getElementById('statusMessage');
+const registrationStatusMessage = document.getElementById('registrationStatusMessage');
+const accountsStatusMessage = document.getElementById('accountsStatusMessage');
+const beneficiaryStatusMessage = document.getElementById('beneficiaryStatusMessage');
+const recoveryKeyStatusMessage = document.getElementById('recoveryKeyStatusMessage');
+const simulationStatusMessage = document.getElementById('simulationStatusMessage');
+const verifyStatusMessage = document.getElementById('verifyStatusMessage');
+const settlementCompleteStatusMessage = document.getElementById('settlementCompleteStatusMessage');
 const connectionStatus = document.getElementById('connectionStatus');
 
 // ---------- Load state from storage (single init point) ----------
@@ -372,12 +379,12 @@ document.getElementById('saveAccountBtn').addEventListener('click', async () => 
     const password = document.getElementById('passwordInput').value;
 
     if (!username || !password) {
-        showStatus('Please fill in all fields', 'error');
+        showStatus('Please fill in all fields', 'error', accountsStatusMessage);
         return;
     }
 
     if (!recoveryKey) {
-        showStatus('Please generate a Recovery Key first', 'error');
+        showStatus('Please generate a Recovery Key first', 'error', accountsStatusMessage);
         return;
     }
 
@@ -388,18 +395,18 @@ document.getElementById('saveAccountBtn').addEventListener('click', async () => 
     document.getElementById('addAccountForm').classList.add('hidden');
     document.getElementById('usernameInput').value = '';
     document.getElementById('passwordInput').value = '';
-    showStatus('Account added successfully', 'success');
+    showStatus('Account added successfully', 'success', accountsStatusMessage);
 });
 
 // Save Beneficiary
 document.getElementById('saveBeneficiaryBtn').addEventListener('click', async () => {
     const email = document.getElementById('beneficiaryEmail').value.trim();
     if (!email) {
-        showStatus('Please enter an email', 'error');
+        showStatus('Please enter an email', 'error', beneficiaryStatusMessage);
         return;
     }
     if (!email.includes('@')) {
-        showStatus('Please enter a valid email', 'error');
+        showStatus('Please enter a valid email', 'error', beneficiaryStatusMessage);
         return;
     }
     vault.beneficiaryEmail = email;
@@ -420,7 +427,7 @@ document.getElementById('saveBeneficiaryBtn').addEventListener('click', async ()
     }
 
     await saveVaultLocal();
-    showStatus('Beneficiary saved and synced!', 'success');
+    showStatus('Beneficiary saved and synced!', 'success', beneficiaryStatusMessage);
 });
 
 // Generate Recovery Key
@@ -445,7 +452,7 @@ document.getElementById('generateKeyBtn').addEventListener('click', async () => 
             });
             console.log('Recovery key hash updated on server');
         } catch (e) {
-            showStatus('Failed to update Recovery Key on server: ' + e.message, 'error');
+            showStatus('Failed to update Recovery Key on server: ' + e.message, 'error', recoveryKeyStatusMessage);
             return;
         }
     }
@@ -453,7 +460,7 @@ document.getElementById('generateKeyBtn').addEventListener('click', async () => 
     recoveryKey = newKey;
     await chrome.storage.local.set({ recoveryKey });
     document.getElementById('recoveryKeyDisplay').textContent = recoveryKey;
-    showStatus('New Recovery Key generated and updated on server!', 'success');
+    showStatus('New Recovery Key generated and updated on server!', 'success', recoveryKeyStatusMessage);
     await saveVaultLocal();
 });
 
@@ -480,7 +487,7 @@ document.getElementById('resetTimerBtn').addEventListener('click', async () => {
 // Test Trigger (30-day simulation)
 document.getElementById('testTriggerBtn').addEventListener('click', async () => {
     if (!userId || !isRegistered) {
-        showStatus('Please register the owner first using the registration box.', 'error');
+        showStatus('Please register the owner first using the registration box.', 'error', simulationStatusMessage);
         return;
     }
 
@@ -501,20 +508,20 @@ document.getElementById('testTriggerBtn').addEventListener('click', async () => 
                 userStatus = 'grace_period';
                 await chrome.storage.local.set({ userStatus });
                 updateStatusUI();
-                showStatus('Test triggered! Status: Grace Period. Check your email.', 'success');
+                showStatus('Test triggered! Status: Grace Period. Check your email.', 'success', simulationStatusMessage);
             }
         } else {
-            showStatus('Test failed: ' + await response.text(), 'error');
+            showStatus('Test failed: ' + await response.text(), 'error', simulationStatusMessage);
         }
     } catch (e) {
-        showStatus('Test failed: ' + e.message, 'error');
+        showStatus('Test failed: ' + e.message, 'error', simulationStatusMessage);
     }
 });
 
 // Test Trigger: Final Settlement (skip grace period entirely)
 document.getElementById('testSettlementBtn').addEventListener('click', async () => {
     if (!userId || !isRegistered) {
-        showStatus('Please register the owner first using the registration box.', 'error');
+        showStatus('Please register the owner first using the registration box.', 'error', simulationStatusMessage);
         return;
     }
 
@@ -529,12 +536,12 @@ document.getElementById('testSettlementBtn').addEventListener('click', async () 
             userStatus = 'deceased';
             await chrome.storage.local.set({ userStatus });
             updateStatusUI();
-            showStatus('Final settlement triggered! Switch to Beneficiary mode to test.', 'success');
+            showStatus('Final settlement triggered! Switch to Beneficiary mode to test.', 'success', simulationStatusMessage);
         } else {
-            showStatus('Test failed: ' + await response.text(), 'error');
+            showStatus('Test failed: ' + await response.text(), 'error', simulationStatusMessage);
         }
     } catch (e) {
-        showStatus('Test failed: ' + e.message, 'error');
+        showStatus('Test failed: ' + e.message, 'error', simulationStatusMessage);
     }
 });
 
@@ -542,16 +549,16 @@ document.getElementById('testSettlementBtn').addEventListener('click', async () 
 document.getElementById('registerOwnerBtn').addEventListener('click', async () => {
     const email = document.getElementById('ownerEmailInput').value;
     if (!email) {
-        showStatus('Please enter an email address', 'error');
+        showStatus('Please enter an email address', 'error', registrationStatusMessage);
         return;
     }
     if (!email.includes('@')) {
-        showStatus('Please enter a valid email address', 'error');
+        showStatus('Please enter a valid email address', 'error', registrationStatusMessage);
         return;
     }
 
     if (!recoveryKey) {
-        showStatus('Please generate a Recovery Key first', 'error');
+        showStatus('Please generate a Recovery Key first', 'error', registrationStatusMessage);
         return;
     }
 
@@ -567,12 +574,12 @@ document.getElementById('registerOwnerBtn').addEventListener('click', async () =
 
         await chrome.storage.local.set({ userId, isRegistered, ownerEmail });
         updateRegistrationUI();
-        showStatus('Registered successfully!', 'success');
+        showStatus('Registered successfully!', 'success', registrationStatusMessage);
 
         // Sync local vault to server after registration completes
         await saveVaultLocal();
     } catch (e) {
-        showStatus('Registration failed: ' + e.message, 'error');
+        showStatus('Registration failed: ' + e.message, 'error', registrationStatusMessage);
     }
 });
 
@@ -614,15 +621,15 @@ document.getElementById('cancelEditEmailBtn').addEventListener('click', () => {
 document.getElementById('saveEmailBtn').addEventListener('click', async () => {
     const newEmail = document.getElementById('editEmailInput').value.trim();
     if (!newEmail || !newEmail.includes('@')) {
-        showStatus('Please enter a valid email address', 'error');
+        showStatus('Please enter a valid email address', 'error', registrationStatusMessage);
         return;
     }
     if (newEmail === ownerEmail) {
-        showStatus('Email is unchanged', 'error');
+        showStatus('Email is unchanged', 'error', registrationStatusMessage);
         return;
     }
     if (!recoveryKey) {
-        showStatus('Recovery key not found. Please generate one first.', 'error');
+        showStatus('Recovery key not found. Please generate one first.', 'error', registrationStatusMessage);
         return;
     }
 
@@ -639,9 +646,9 @@ document.getElementById('saveEmailBtn').addEventListener('click', async () => {
         await saveVaultLocal();
 
         updateRegistrationUI();
-        showStatus('New account created with updated email!', 'success');
+        showStatus('New account created with updated email!', 'success', registrationStatusMessage);
     } catch (e) {
-        showStatus('Failed to create account: ' + e.message, 'error');
+        showStatus('Failed to create account: ' + e.message, 'error', registrationStatusMessage);
     }
 });
 
@@ -675,7 +682,7 @@ document.getElementById('beneficiaryVerifyBtn').addEventListener('click', async 
     const userIdInput = document.getElementById('beneficiaryUserIdInput').value;
 
     if (!key || !userIdInput) {
-        showStatus('Please enter both Recovery Key and User ID', 'error');
+        showStatus('Please enter both Recovery Key and User ID', 'error', verifyStatusMessage);
         return;
     }
 
@@ -702,12 +709,12 @@ document.getElementById('beneficiaryVerifyBtn').addEventListener('click', async 
                 
                 chrome.storage.session.set({ beneficiarySession }, () => {
                     renderSettlementDashboard(decrypted, key);
-                    showStatus('Settlement loaded successfully', 'success');
+                    showStatus('Settlement loaded successfully', 'success', verifyStatusMessage);
                 });
             }
         }
     } catch (e) {
-        showStatus('Verification failed: ' + e.message, 'error');
+        showStatus('Verification failed: ' + e.message, 'error', verifyStatusMessage);
     }
 });
 
@@ -766,12 +773,12 @@ function renderSettlementDashboard(decrypted, recoveryKeyForVault) {
                     }
                 }, (response) => {
                     if (response && response.status === 'ok') {
-                        showStatus(`Opening ${platform}... Follow the guided steps in the new tab.`, 'success');
+                        showStatus(`Opening ${platform}... Follow the guided steps in the new tab.`, 'success', settlementCompleteStatusMessage);
                         e.target.textContent = 'In Progress...';
                         e.target.disabled = true;
                         e.target.style.background = '#f0ad4e';
                     } else {
-                        showStatus(`Failed to open ${platform}: ${response?.message || 'Unknown error'}`, 'error');
+                        showStatus(`Failed to open ${platform}: ${response?.message || 'Unknown error'}`, 'error', settlementCompleteStatusMessage);
                     }
                 });
             }
@@ -817,9 +824,9 @@ function renderSettlementDashboard(decrypted, recoveryKeyForVault) {
                     <p style="font-size: 12px; color: #6c757d;">All accounts have been processed and data has been securely cleared.</p>
                 </div>
             `;
-            showStatus('Settlement completed. All data cleared.', 'success');
+            showStatus('Settlement completed. All data cleared.', 'success', settlementCompleteStatusMessage);
         } catch (e) {
-            showStatus('Failed to complete settlement: ' + e.message, 'error');
+            showStatus('Failed to complete settlement: ' + e.message, 'error', settlementCompleteStatusMessage);
         }
     });
     container.appendChild(completeBtn);
@@ -836,13 +843,16 @@ function checkAllAccountsDeleted() {
 }
 
 // ---------- Helpers ----------
-function showStatus(message, type = 'info') {
-    statusMessage.textContent = message;
-    statusMessage.className = 'status-message';
-    if (type === 'success') statusMessage.classList.add('success');
-    if (type === 'error') statusMessage.classList.add('error');
+function showStatus(message, type = 'info', targetElement = statusMessage) {
+    if (!targetElement) return;
+    targetElement.textContent = message;
+    targetElement.className = 'status-message';
+    if (type === 'success') targetElement.classList.add('success');
+    if (type === 'error') targetElement.classList.add('error');
     setTimeout(() => {
-        statusMessage.textContent = '';
-        statusMessage.className = 'status-message';
+        if (targetElement.textContent === message) {
+            targetElement.textContent = '';
+            targetElement.className = 'status-message';
+        }
     }, 5000);
 }
