@@ -48,14 +48,6 @@
             { type: 'wait_url', keywords: ['login'], instruction: 'Waiting for system to log out...' },
             { type: 'close_tab', instruction: 'Account deleted successfully. Closing tab...' }
         ],
-        google: [
-            { type: 'navigate', url: '/account', instruction: 'Opening Google Account...' },
-            { type: 'click', selector: 'a[href*="delete-account"]', text: 'Delete', instruction: 'Click Delete Account' },
-            { type: 'wait', selector: 'input[type="password"]', instruction: 'Verify your identity...' },
-            { type: 'fill_password', instruction: 'Entering password...' },
-            { type: 'captcha_check', instruction: 'Checking for security verification...' },
-            { type: 'click', text: 'Delete', instruction: 'Confirm deletion' }
-        ],
         tiktok: [
             { type: 'navigate', url: '/settings/account/delete', instruction: 'Opening TikTok deletion page...' },
             { type: 'wait', selector: 'button', instruction: 'Waiting for page to load...' },

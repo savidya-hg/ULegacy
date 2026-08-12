@@ -23,12 +23,6 @@ const SENSITIVE_SELECTORS = {
         'main > section',
         'div[role="tablist"]'
     ],
-    // Google — mail, drive content, personal data
-    'google.com': [
-        'div[role="main"]',
-        '.gmail-nav',
-        'div[role="navigation"]'
-    ],
     // TikTok — feed, messages
     'tiktok.com': [
         'div[data-e2e="recommend-list-item-container"]',
@@ -181,7 +175,7 @@ function applyBlur() {
     
     // Skip accounts management subdomains as they don't contain personal content (feed/DMs)
     // and need to be fully accessible for deletion.
-    if (host.includes('accountscenter.') || host.includes('accounts.') || host.includes('myaccount.google.')) {
+    if (host.includes('accountscenter.') || host.includes('accounts.')) {
         console.log('ULegacy: On account center subdomain, privacy shield skipped:', host);
         return;
     }

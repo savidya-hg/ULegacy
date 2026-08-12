@@ -25,7 +25,6 @@ async function sendHeartbeat(userId) {
 // ---------- Platform Login URLs ----------
 const PLATFORM_LOGIN_URLS = {
     facebook: 'https://www.facebook.com/login',
-    google: 'https://accounts.google.com/signin',
     instagram: 'https://www.instagram.com/accounts/login/',
     tiktok: 'https://www.tiktok.com/login'
 };
