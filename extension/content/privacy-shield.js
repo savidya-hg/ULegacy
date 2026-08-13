@@ -48,7 +48,14 @@ let shieldApplied = false;
 function checkSettlementMode() {
     // Check session storage for settlement flag set by background.js
     if (chrome.storage && chrome.storage.session) {
-        chrome.storage.session.get(['settlementMode'], (result) => {
+        chrome.storage.session.get(['settlementMode', 'settlementDeletionDone'], (result) => {
+            // If the guided-logic has already completed deletion, the account
+            // is gone — there's nothing private left to shield on the post-logout page.
+            if (result.settlementDeletionDone) {
+                console.log('ULegacy: Deletion complete — privacy shield inactive');
+                return;
+            }
+
             if (result.settlementMode === true) {
                 isSettlementMode = true;
                 console.log('ULegacy: Settlement mode ACTIVE — applying privacy shield');
