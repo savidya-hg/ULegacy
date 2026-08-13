@@ -717,23 +717,29 @@
         chrome.storage.session.get(['settlementPlatform'], (result) => {
             const platform = result.settlementPlatform || 'unknown';
 
-            showTooltip('✅ Account deletion completed! Closing tab in 3 seconds...', null);
+            // Try to show a completion tooltip (may fail if called before body/styles are ready)
+            try {
+                if (document.body) {
+                    injectTooltipStyles();
+                    showTooltip('✅ Account deletion completed! Closing tab in 3 seconds...', null);
+                }
+            } catch (e) { /* Page not ready — that's fine, background handles the close */ }
 
-            // Notify background.js to drop the user from Supabase now that it's done
+            // Notify background.js — it will close the window AND relay to popup
             chrome.runtime.sendMessage({
                 type: 'settlement_account_deleted',
                 data: { platform: platform }
             });
 
-            // Trigger tab closure
+            // Backup: if background.js didn't close the window (e.g. race condition),
+            // try again after 3 seconds.
             setTimeout(() => {
-                const tooltip = document.querySelector('.ulegacy-guide-tooltip');
-                if (tooltip) tooltip.remove();
+                try {
+                    const tooltip = document.querySelector('.ulegacy-guide-tooltip');
+                    if (tooltip) tooltip.remove();
+                } catch (e) {}
 
-                // Standard close (works if the script opened the tab)
                 window.close();
-
-                // Backup close (tell background.js to kill the tab)
                 chrome.runtime.sendMessage({ type: 'close_current_tab' });
             }, 3000);
         });

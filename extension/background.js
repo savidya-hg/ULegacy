@@ -180,11 +180,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         // Store credentials and settlement mode flag in session storage
+        // Clear settlementDeletionDone from any previous deletion so the new
+        // settlement starts fresh (auto-fill, privacy-shield, guide all active).
         chrome.storage.session.set({
             settlementMode: true,
             settlementPlatform: platform,
             settlementCredentials: { username, password },
-            settlementStep: 0
+            settlementStep: 0,
+            settlementDeletionDone: false
         }, () => {
             // Open a floating popup window to the platform login page
             chrome.windows.create({
@@ -214,7 +217,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             settlementMode: false,
             settlementPlatform: null,
             settlementCredentials: null,
-            settlementStep: 0
+            settlementStep: 0,
+            settlementDeletionDone: false
         });
 
         // Close the temporary popup window
@@ -224,14 +228,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             });
         }
 
-        // Broadcast to popup (it will update the dashboard)
+        // Relay to popup so it updates the dashboard
         chrome.runtime.sendMessage({
             type: 'account_deletion_complete',
             platform: platform
-        }).catch(() => {
-            // Popup might not be open — that's fine
-        });
+        }).catch(() => {});
 
+        sendResponse({ status: 'ok' });
+        return true;
+    }
+
+    // --- Close Current Tab (backup for window.close()) ---
+    // Content scripts can't always close their own tab; this lets them
+    // ask the background to do it.
+    if (message.type === 'close_current_tab') {
+        if (sender.tab && sender.tab.windowId) {
+            chrome.windows.remove(sender.tab.windowId, () => {
+                console.log('Closed settlement window via close_current_tab');
+            });
+        }
         sendResponse({ status: 'ok' });
         return true;
     }
