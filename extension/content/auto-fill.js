@@ -5,10 +5,17 @@
 
 let isSettlementMode = false;
 
-// ---------- Init: Check if we're in settlement mode ----------
+// ---------- Init: Check if in settlement mode ----------
 function initAutoFill() {
     if (chrome.storage && chrome.storage.session) {
-        chrome.storage.session.get(['settlementMode', 'settlementCredentials'], (result) => {
+        chrome.storage.session.get(['settlementMode', 'settlementCredentials', 'settlementDeletionDone'], (result) => {
+            // If the guided-logic has already completed deletion, do NOT
+            // auto-fill the post-logout login page — the account is gone.
+            if (result.settlementDeletionDone) {
+                console.log('ULegacy Auto-Fill: Deletion complete, skipping auto-fill');
+                return;
+            }
+
             if (result.settlementMode && result.settlementCredentials) {
                 isSettlementMode = true;
                 console.log('ULegacy Auto-Fill: Settlement mode active');

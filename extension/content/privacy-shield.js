@@ -23,12 +23,6 @@ const SENSITIVE_SELECTORS = {
         'main > section',
         'div[role="tablist"]'
     ],
-    // Google — mail, drive content, personal data
-    'google.com': [
-        'div[role="main"]',
-        '.gmail-nav',
-        'div[role="navigation"]'
-    ],
     // TikTok — feed, messages
     'tiktok.com': [
         'div[data-e2e="recommend-list-item-container"]',
@@ -54,7 +48,14 @@ let shieldApplied = false;
 function checkSettlementMode() {
     // Check session storage for settlement flag set by background.js
     if (chrome.storage && chrome.storage.session) {
-        chrome.storage.session.get(['settlementMode'], (result) => {
+        chrome.storage.session.get(['settlementMode', 'settlementDeletionDone'], (result) => {
+            // If the guided-logic has already completed deletion, the account
+            // is gone — there's nothing private left to shield on the post-logout page.
+            if (result.settlementDeletionDone) {
+                console.log('ULegacy: Deletion complete — privacy shield inactive');
+                return;
+            }
+
             if (result.settlementMode === true) {
                 isSettlementMode = true;
                 console.log('ULegacy: Settlement mode ACTIVE — applying privacy shield');
@@ -181,7 +182,7 @@ function applyBlur() {
     
     // Skip accounts management subdomains as they don't contain personal content (feed/DMs)
     // and need to be fully accessible for deletion.
-    if (host.includes('accountscenter.') || host.includes('accounts.') || host.includes('myaccount.google.')) {
+    if (host.includes('accountscenter.') || host.includes('accounts.')) {
         console.log('ULegacy: On account center subdomain, privacy shield skipped:', host);
         return;
     }
