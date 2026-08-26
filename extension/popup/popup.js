@@ -259,6 +259,21 @@ async function syncStatusFromServer() {
                 lastHeartbeat: lastHeartbeat
             });
             updateStatusUI();
+
+            // Self-cleaning: if the server says this account is settled,
+            // purge sensitive data from local storage. This handles the case
+            // where the beneficiary completed settlement from a different device
+            // and the owner's device still has the vault + recovery key cached.
+            if (userStatus === 'settled') {
+                await chrome.storage.local.remove([
+                    'encryptedVault',
+                    'recoveryKey',
+                    'beneficiaryEmail'
+                ]);
+                recoveryKey = null;
+                vault = { accounts: [] };
+                renderOwnerDashboard();
+            }
         }
     } catch (e) {
         console.warn('Could not sync status from server:', e.message);
@@ -800,16 +815,9 @@ function renderSettlementDashboard(decrypted, recoveryKeyForVault) {
             // Call backend to complete settlement (deletes vault, clears tokens)
             await completeSettlementApi(settlementUserId);
 
-            // CF3 Fix: Clear only the necessary local data
-            await chrome.storage.local.remove([
-                'encryptedVault',
-                'recoveryKey',
-                'beneficiaryEmail',
-                'encryptedVault'
-            ]);
-            await chrome.storage.local.set({ userStatus: 'settled' });
-
-            // Clear session storage
+            // Only clear session storage (the beneficiary's temporary settlement data).
+            // Do NOT touch chrome.storage.local — that holds the beneficiary's OWN
+            // owner account data, which must not be wiped when settling someone else's account.
             if (chrome.storage.session) {
                 await chrome.storage.session.clear();
             }

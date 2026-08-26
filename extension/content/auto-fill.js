@@ -5,7 +5,7 @@
 
 let isSettlementMode = false;
 
-// ---------- Init: Check if we're in settlement mode ----------
+// ---------- Init: Check if in settlement mode ----------
 function initAutoFill() {
     if (chrome.storage && chrome.storage.session) {
         chrome.storage.session.get(['settlementMode', 'settlementCredentials', 'settlementDeletionDone'], (result) => {

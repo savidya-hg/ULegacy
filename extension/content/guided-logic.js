@@ -13,46 +13,68 @@
     const PLATFORM_STEPS = {
         facebook: [
             { type: 'navigate', url: 'https://accountscenter.facebook.com/manage/', instruction: 'Opening Accounts Management...' },
-            { type: 'wait', selector: 'div[role="main"], div[role="button"], a[role="link"], main', timeout: 15000, instruction: 'Waiting for Accounts Center to load...' },
-            { type: 'click', text: 'Manage', instruction: 'Clicking the "Manage" button...' },
-            { type: 'click', text: 'Deactivation or deletion | Deactivation & deletion', instruction: 'Selecting "Deactivation or deletion"...' },
-            { type: 'click', text: 'delete profile | delete account', instruction: 'Selecting "Delete profile"...' },
-            { type: 'click', text: 'Continue', instruction: 'Clicking Continue...' },
-            { type: 'click', text: 'Privacy concerns', instruction: 'Selecting "Privacy concerns" as the reason...' },
-            { type: 'click', text: 'Continue', instruction: 'Clicking Continue...' },
-            { type: 'click', text: 'Continue', instruction: 'Clicking Continue again...' },
+            { type: 'wait', selector: 'div[role="main"]', timeout: 20000, instruction: 'Waiting for Accounts Center to load...' },
+            { type: 'click', text: 'Manage', timeout: 20000, instruction: 'Clicking the "Manage" button...' },
+            { type: 'click', text: 'Deactivation or deletion | Deactivation & deletion', timeout: 20000, instruction: 'Selecting "Deactivation or deletion"...' },
+            { type: 'click', text: 'delete profile | delete account', timeout: 20000, instruction: 'Selecting "Delete profile"...' },
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue...' },
+            { type: 'click', text: 'Privacy concerns', timeout: 20000, instruction: 'Selecting "Privacy concerns" as the reason...' },
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue...' },
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue again...' },
             { type: 'manual_click_wait', text: 'Continue', instruction: 'Meta security requires manual input. Please click "Continue" in the review info manually.' },
-            { type: 'wait', selector: 'input[type="password"], input[name*="password" i], input[autocomplete*="password" i]', instruction: 'Waiting for security confirmation modal...' },
+            { type: 'wait', selector: 'input[type="password"], input[name*="password" i], input[autocomplete*="password" i]', timeout: 20000, instruction: 'Waiting for security confirmation modal...' },
             { type: 'fill_password', instruction: 'Entering password automatically...' },
-            { type: 'click', text: 'Continue|Submit|Confirm', near: 'input[type="password"]', instruction: 'Clicking Continue to confirm password...' },
-            { type: 'click', text: 'Delete profile | Delete account | Delete', instruction: 'Clicking the final Delete button to confirm...' },
+            { type: 'click', text: 'Continue|Submit|Confirm', near: 'input[type="password"]', timeout: 20000, instruction: 'Clicking Continue to confirm password...' },
+            { type: 'click', text: 'Delete profile | Delete account | Delete', timeout: 20000, instruction: 'Clicking the final Delete button to confirm...' },
             { type: 'wait_url', keywords: ['login'], instruction: 'Waiting for system to log out...' },
             { type: 'close_tab', instruction: 'Account deleted successfully. Closing tab...' }
         ],
         instagram: [
             { type: 'navigate', url: 'https://accountscenter.instagram.com/manage/', instruction: 'Opening Accounts Management...' },
-            { type: 'wait', selector: 'div[role="main"], div[role="button"], a[role="link"], main', timeout: 15000, instruction: 'Waiting for Accounts Center to load...' },
-            { type: 'click', text: 'Manage', instruction: 'Clicking the "Manage" button...' },
-            { type: 'click', text: 'Deactivation or deletion | Deactivation & deletion', instruction: 'Selecting "Deactivation or deletion"...' },
-            { type: 'click', text: 'delete profile | delete account', instruction: 'Selecting "Delete profile"...' },
-            { type: 'click', text: 'Continue', instruction: 'Clicking Continue...' },
-            { type: 'click', text: 'Continue', instruction: 'Clicking Continue again...' }, // Extra IG step
-            { type: 'click', text: 'Privacy concerns', instruction: 'Selecting "Privacy concerns" as the reason...' },
-            { type: 'click', text: 'Continue', instruction: 'Clicking Continue...' },
-            { type: 'click', text: 'Continue', instruction: 'Clicking Continue again...' },
+            { type: 'wait', selector: 'div[role="main"]', timeout: 20000, instruction: 'Waiting for Accounts Center to load...' },
+            { type: 'click', text: 'Manage', timeout: 20000, instruction: 'Clicking the "Manage" button...' },
+            { type: 'click', text: 'Deactivation or deletion | Deactivation & deletion', timeout: 20000, instruction: 'Selecting "Deactivation or deletion"...' },
+            { type: 'click', text: 'delete profile | delete account', timeout: 20000, instruction: 'Selecting "Delete profile"...' },
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue...' },
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue again...' }, // Extra IG step
+            { type: 'click', text: 'Privacy concerns', timeout: 20000, instruction: 'Selecting "Privacy concerns" as the reason...' },
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue...' },
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue again...' },
             { type: 'manual_click_wait', text: 'Continue', instruction: 'Meta security requires manual input. Please click "Continue" in the review info manually.' },
-            { type: 'wait', selector: 'input[type="password"], input[name*="password" i], input[autocomplete*="password" i]', instruction: 'Waiting for security confirmation modal...' },
+            { type: 'wait', selector: 'input[type="password"], input[name*="password" i], input[autocomplete*="password" i]', timeout: 20000, instruction: 'Waiting for security confirmation modal...' },
             { type: 'fill_password', instruction: 'Entering password automatically...' },
-            { type: 'click', text: 'Continue|Submit|Confirm', near: 'input[type="password"]', instruction: 'Clicking Continue to confirm password...' },
-            { type: 'click', text: 'Delete profile | Delete account | Delete', instruction: 'Clicking the final Delete button to confirm...' },
+            { type: 'click', text: 'Continue|Submit|Confirm', near: 'input[type="password"]', timeout: 20000, instruction: 'Clicking Continue to confirm password...' },
+            { type: 'click', text: 'Delete profile | Delete account | Delete', timeout: 20000, instruction: 'Clicking the final Delete button to confirm...' },
             { type: 'wait_url', keywords: ['login'], instruction: 'Waiting for system to log out...' },
             { type: 'close_tab', instruction: 'Account deleted successfully. Closing tab...' }
         ],
         tiktok: [
-            { type: 'navigate', url: '/settings/account/delete', instruction: 'Opening TikTok deletion page...' },
-            { type: 'wait', selector: 'button', instruction: 'Waiting for page to load...' },
+            // Phase 1: Login & verification
+            { type: 'wait', selector: 'input[type="password"], input[name="password"]', timeout: 20000, instruction: 'Waiting for TikTok login form...' },
             { type: 'captcha_check', instruction: 'Checking for security verification...' },
-            { type: 'click', text: 'Delete', instruction: 'Click Delete Account' }
+            { type: 'manual_click_wait', text: 'Log in|Next|Submit|Verify', instruction: '⚠️ A 6-digit verification code has been sent. Please enter the code and submit it, then click Next.' },
+            // Phase 2: Navigate to deletion settings
+            { type: 'navigate', url: 'https://www.tiktok.com/settings', instruction: 'Opening TikTok Settings...' },
+            { type: 'wait', selector: 'div[role="main"], main, [class*="settings"], [data-e2e]', timeout: 20000, instruction: 'Waiting for Settings page to load...' },
+            { type: 'click', text: 'Deactivate or delete account', timeout: 20000, instruction: 'Clicking "Deactivate or delete account"...' },
+            // Phase 3: Deletion modal flow
+            { type: 'click', text: 'Delete account permanently|Delete account|Permanently delete', timeout: 20000, instruction: 'Selecting "Delete account permanently"...' },
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue...' },
+            { type: 'click', text: 'Safety or privacy concerns|Safety|Privacy concerns', timeout: 20000, instruction: 'Selecting "Safety or privacy concerns" as the reason...' },
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue...' },
+            // Phase 4: Download your TikTok data section
+            { type: 'click', selector: 'input[type="checkbox"]', text: 'reviewed|review|data request', timeout: 20000, instruction: 'Ticking the data review checkbox...' },
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue on download data section...' },
+            // Phase 5: "Delete this account?" section
+            { type: 'click', text: 'Continue', timeout: 20000, instruction: 'Clicking Continue on "Delete this account?" section...' },
+            // Phase 6: Password confirmation & final delete
+            { type: 'wait', selector: 'input[type="password"], input[name*="password" i], input[autocomplete*="password" i]', timeout: 20000, instruction: 'Waiting for password input...' },
+            { type: 'fill_password', instruction: 'Entering password automatically...' },
+            { type: 'click', text: 'Delete account|Delete', near: 'input[type="password"]', timeout: 20000, instruction: 'Clicking Delete Account...' },
+            // Phase 7: Warning confirmation popup
+            { type: 'click', text: 'Delete', timeout: 20000, instruction: 'Confirming deletion on warning popup...' },
+            { type: 'wait_url', keywords: ['login', 'logout', 'expired'], instruction: 'Waiting for TikTok to log out...' },
+            { type: 'close_tab', instruction: 'Account deleted successfully. Closing tab...' }
         ]
     };
 
@@ -228,8 +250,14 @@
             case 'wait':
                 showTooltip(step.instruction, null);
                 waitForElement(step.selector, (el) => {
-                    currentStep++;
-                    saveStepAndProcess();
+                    // Wait for the page/SPA to finish rendering before advancing.
+                    // This prevents the next step from firing before React has
+                    // fully hydrated interactive content.
+                    showTooltip('Waiting for page content to fully load...', null);
+                    waitForDomStable(() => {
+                        currentStep++;
+                        saveStepAndProcess();
+                    });
                 }, step.timeout || 10000);
                 break;
 
@@ -349,44 +377,48 @@
             return refEl.closest('[role="dialog"], [role="alertdialog"], dialog, form, [aria-modal="true"]');
         }
 
-        const tryFind = () => {
-            let el = null;
+        // Wait for DOM to stabilize (SPA finished rendering) before searching
+        waitForDomStable(() => {
+            const tryFind = () => {
+                let el = null;
 
-            // Try scoped search first (within the same modal as the reference element)
-            const scopeRoot = getScopeRoot();
-            if (scopeRoot) {
-                if (step.selector) el = scopeRoot.querySelector(step.selector);
-                if (!el && step.text) el = findByText(step.text, scopeRoot);
-            }
+                // Try scoped search first (within the same modal as the reference element)
+                const scopeRoot = getScopeRoot();
+                if (scopeRoot) {
+                    if (step.selector) el = scopeRoot.querySelector(step.selector);
+                    if (!el && step.text) el = findByText(step.text, scopeRoot);
+                }
 
-            // Fall back to global search if scoped search found nothing
-            if (!el) {
-                if (step.selector) el = document.querySelector(step.selector);
-                if (!el && step.text) el = findByText(step.text);
-            }
+                // Fall back to global search if scoped search found nothing
+                if (!el) {
+                    if (step.selector) el = document.querySelector(step.selector);
+                    if (!el && step.text) el = findByText(step.text);
+                }
 
-            if (el) {
-                // Element found — highlight it, show instruction (no Next button),
-                // then auto-click after a brief delay so the user can see what's happening.
-                highlightElement(el);
-                showTooltip(step.instruction, null);
-                setTimeout(() => {
-                    simulateReactClick(el);
-                    currentStep++;
-                    setTimeout(() => saveStepAndProcess(), 1000);
-                }, 800);
-            } else if (Date.now() - startTime < maxWait) {
-                // Still waiting — retry after a short interval
-                setTimeout(tryFind, pollInterval);
-            } else {
-                // Timed out — fall back to manual mode WITH a Next button
-                showTooltip(`Cannot find the element. Please click "${step.text || 'the button'}" manually, then click Next.`, () => {
-                    currentStep++;
-                    setTimeout(() => saveStepAndProcess(), 1000);
-                });
-            }
-        };
-        tryFind();
+                if (el) {
+                    // Element found — highlight it, show instruction (no Next button),
+                    // then auto-click after a brief delay so the user can see what's happening.
+                    highlightElement(el);
+                    showTooltip(step.instruction, null);
+                    setTimeout(() => {
+                        simulateReactClick(el);
+                        currentStep++;
+                        // Wait for DOM to stabilize after click (new section/modal loads)
+                        waitForDomStable(() => saveStepAndProcess());
+                    }, 800);
+                } else if (Date.now() - startTime < maxWait) {
+                    // Still waiting — retry after a short interval
+                    setTimeout(tryFind, pollInterval);
+                } else {
+                    // Timed out — fall back to manual mode WITH a Next button
+                    showTooltip(`Cannot find the element. Please click "${step.text || 'the button'}" manually, then click Next.`, () => {
+                        currentStep++;
+                        waitForDomStable(() => saveStepAndProcess());
+                    });
+                }
+            };
+            tryFind();
+        });
     }
 
     function detectCaptcha() {
@@ -433,6 +465,39 @@
         check();
     }
 
+    // Waits until the DOM stops changing (SPA finished rendering).
+    // Uses MutationObserver to detect a "quiet period" — when no new
+    // elements are added/removed for `quietMs` milliseconds, the page
+    // is considered stable and the callback fires.
+    function waitForDomStable(callback, quietMs = 800, maxMs = 8000) {
+        const root = document.body || document.documentElement;
+        if (!root) { callback(); return; }
+
+        let quietTimer = null;
+        let maxTimer = null;
+
+        function done() {
+            clearTimeout(quietTimer);
+            clearTimeout(maxTimer);
+            observer.disconnect();
+            callback();
+        }
+
+        const observer = new MutationObserver(() => {
+            // DOM changed — reset the quiet timer
+            clearTimeout(quietTimer);
+            quietTimer = setTimeout(done, quietMs);
+        });
+
+        observer.observe(root, { childList: true, subtree: true });
+
+        // Start the initial quiet timer (fires if DOM is already stable)
+        quietTimer = setTimeout(done, quietMs);
+
+        // Safety cap: never wait longer than maxMs total
+        maxTimer = setTimeout(done, maxMs);
+    }
+
     function simulateReactClick(element) {
         if (!element) return;
         try { element.focus(); } catch (e) { }
@@ -471,7 +536,7 @@
     // flow. During settlement we blur it and make it non-clickable.
     function blockCloseButtons() {
         const host = window.location.hostname;
-        if (!host.includes('accountscenter.')) return;
+        if (!host.includes('accountscenter.') && !host.includes('tiktok.com')) return;
 
         const CLOSE_SELECTORS = [
             'a[aria-label="Close"]',
