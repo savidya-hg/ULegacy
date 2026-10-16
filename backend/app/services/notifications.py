@@ -15,8 +15,8 @@ logger = logging.getLogger("ulegacy.notifications")
 
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME")  # your Gmail address
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  # App Password (not normal password)
+SMTP_USERNAME = os.getenv("SMTP_USERNAME")  # Gmail address
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")  # App Password
 FROM_EMAIL = os.getenv("FROM_EMAIL", SMTP_USERNAME)
 BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
@@ -34,7 +34,7 @@ def send_email(to_email: str, subject: str, html_content: str, text_content: str
         msg['From'] = f"ULegacy <{FROM_EMAIL}>"
         msg['To'] = to_email
 
-        # Plain-text fallback (improves deliverability)
+        # Plain-text fallback
         if text_content:
             msg.attach(MIMEText(text_content, 'plain'))
 
